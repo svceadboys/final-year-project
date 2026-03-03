@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+pymysql
+python-dotenv
+tensorflow
+numpy
+pandas
+Pillow
+scikit-learn
+statsmodels
+networkx
+matplotlib
+python-multipart
+aiofiles

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Records – EcoSort AI</title>
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a class="sidebar-logo" href="index.html">
+            <div class="logo-icon">♻️</div>
+            <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+        </a>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Menu</div>
+            <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+            <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+            <a class="nav-item active" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+            <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="name">arshadvarunoffi@gmail.com</div>
+                    <div class="role">Admin</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Records</h1>
+            <p>Classification history &amp; data management</p>
+        </div>
+        <div class="page-content">
+
+            <div class="card">
+                <!-- Search + filters -->
+                <div class="search-row">
+                    <div class="search-wrapper" style="flex:1;">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-input" id="searchInput"
+                            placeholder="Search by ID or filename…" />
+                    </div>
+                    <button class="btn btn-secondary btn-sm" onclick="api.downloadCSV()">⬇ Download CSV</button>
+                </div>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;" id="filterBtns">
+                    <button class="filter-btn active" data-type="">All</button>
+                    <button class="filter-btn" data-type="Organic">Organic</button>
+                    <button class="filter-btn" data-type="Recyclable">Recyclable</button>
+                    <button class="filter-btn" data-type="Hazardous">Hazardous</button>
+                    <button class="filter-btn" data-type="Other">Other</button>
+                </div>
+
+                <!-- Summary counts -->
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;" id="statsCounts">
+                    <span style="font-size:12px;color:var(--text-muted);">Loading stats…</span>
+                </div>
+
+                <!-- Table -->
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Filename</th>
+                                <th>Classification</th>
+                                <th>Confidence</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recordsTableBody">
+                            <tr>
+                                <td colspan="5" class="td-muted" style="padding:24px;text-align:center;">Loading…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">
+                    <div style="font-size:12px;color:var(--text-muted);" id="pageInfo"></div>
+                    <div style="display:flex;gap:8px;">
+                        <button class="btn btn-secondary btn-sm" id="prevBtn" disabled>← Prev</button>
+                        <button class="btn btn-secondary btn-sm" id="nextBtn">Next →</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script>
+        const PAGE_SIZE = 20;
+        let currentOffset = 0;
+        let currentFilter = "";
+        let currentSearch = "";
+        let allRecords = [];
+        let filtered = [];
+
+        async function loadStats() {
+            try {
+                const stats = await api.getRecordStats();
+                const el = document.getElementById("statsCounts");
+                const total = Object.values(stats).reduce((a, b) => a + b, 0);
+                const colors = { Organic: "var(--accent)", Recyclable: "var(--blue)", Hazardous: "var(--red)", Other: "var(--yellow)" };
+                el.innerHTML = `<span style="font-size:12px;color:var(--text-secondary);">Total: <strong style="color:var(--text-primary)">${total}</strong></span>` +
+                    Object.entries(stats).map(([t, c]) =>
+                        `<span style="font-size:12px;color:${colors[t] || 'var(--text-secondary)'};">${t}: <strong>${c}</strong></span>`
+                    ).join("");
+            } catch (_) { }
+        }
+
+        async function loadRecords() {
+            try {
+                allRecords = await api.getRecords(currentFilter || null, 500, 0);
+                applyFilter();
+            } catch (e) {
+                document.getElementById("recordsTableBody").innerHTML =
+                    `<tr><td colspan="5" class="td-muted" style="padding:24px;text-align:center;">Error: ${e.message}</td></tr>`;
+            }
+        }
+
+        function applyFilter() {
+            const q = currentSearch.toLowerCase();
+            filtered = allRecords.filter(r => {
+                const matchType = !currentFilter || r.waste_type === currentFilter;
+                const idStr = `WR-${String(r.id).padStart(4, "0")}`;
+                const matchSearch = !q || idStr.toLowerCase().includes(q) || r.waste_type.toLowerCase().includes(q);
+                return matchType && matchSearch;
+            });
+            currentOffset = 0;
+            renderPage();
+        }
+
+        function renderPage() {
+            const page = filtered.slice(currentOffset, currentOffset + PAGE_SIZE);
+            const tbody = document.getElementById("recordsTableBody");
+
+            if (page.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="td-muted" style="padding:24px;text-align:center;">No records found</td></tr>`;
+            } else {
+                tbody.innerHTML = page.map(r => {
+                    const idStr = `WR-${String(r.id).padStart(4, "0")}`;
+                    const conf = (r.confidence * 100).toFixed(1);
+                    return `<tr>
+        <td class="td-id">${idStr}</td>
+        <td style="font-weight:500;">waste_image.jpg</td>
+        <td>${wasteBadge(r.waste_type)}</td>
+        <td>
+          <div class="confidence-bar">
+            <div class="confidence-track"><div class="confidence-fill" style="width:${conf}%"></div></div>
+            <span style="font-size:12px;color:var(--text-secondary);">${conf}%</span>
+          </div>
+        </td>
+        <td class="td-muted">${formatDate(r.timestamp)}</td>
+      </tr>`;
+                }).join("");
+            }
+
+            const total = filtered.length;
+            const start = currentOffset + 1;
+            const end = Math.min(currentOffset + PAGE_SIZE, total);
+            document.getElementById("pageInfo").textContent = total > 0 ? `Showing ${start}–${end} of ${total}` : "";
+            document.getElementById("prevBtn").disabled = currentOffset === 0;
+            document.getElementById("nextBtn").disabled = currentOffset + PAGE_SIZE >= total;
+        }
+
+        // Filter buttons
+        document.getElementById("filterBtns").addEventListener("click", e => {
+            const btn = e.target.closest(".filter-btn");
+            if (!btn) return;
+            document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            currentFilter = btn.dataset.type;
+            applyFilter();
+        });
+
+        // Search
+        let searchTimer;
+        document.getElementById("searchInput").addEventListener("input", e => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => { currentSearch = e.target.value; applyFilter(); }, 250);
+        });
+
+        // Pagination
+        document.getElementById("prevBtn").addEventListener("click", () => { currentOffset = Math.max(0, currentOffset - PAGE_SIZE); renderPage(); });
+        document.getElementById("nextBtn").addEventListener("click", () => { currentOffset += PAGE_SIZE; renderPage(); });
+
+        loadStats();
+        loadRecords();
+    </script>
+</body>
+
+</html>

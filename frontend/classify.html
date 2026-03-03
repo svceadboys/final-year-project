@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classify – EcoSort AI</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <style>
+        .step {
+            display: none;
+        }
+
+        .step.active {
+            display: block;
+            animation: fadeUp .4s ease;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .file-list {
+            max-height: 220px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 8px;
+            margin-top: 12px;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            background: var(--bg-input);
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+
+        .file-item img {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .file-item .name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .file-item .size {
+            color: var(--text-muted);
+            font-size: 11px;
+            min-width: 55px;
+            text-align: right;
+        }
+
+        .file-item .remove-btn {
+            cursor: pointer;
+            color: var(--red);
+            font-size: 16px;
+            padding: 0 4px;
+            opacity: .7;
+        }
+
+        .file-item .remove-btn:hover {
+            opacity: 1;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 16px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width .3s ease;
+        }
+
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            margin: 16px 0;
+        }
+
+        .summary-chip {
+            text-align: center;
+            padding: 10px 8px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-input);
+        }
+
+        .summary-chip .count {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .summary-chip .label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a class="sidebar-logo" href="index.html">
+            <div class="logo-icon">♻️</div>
+            <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+        </a>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Menu</div>
+            <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+            <a class="nav-item active" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+            <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+            <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="name">arshadvarunoffi@gmail.com</div>
+                    <div class="role">Admin</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Classify Waste</h1>
+            <p>Upload one or many images → AI predicts each → View results in table</p>
+        </div>
+        <div class="page-content">
+
+            <!-- ══════════ STEP 1: UPLOAD ══════════ -->
+            <div class="step active" id="step1">
+                <div class="card" style="max-width:680px;margin:0 auto;">
+                    <div class="card-header">
+                        <div class="card-title">📸 Step 1 — Select Images</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="binSelect">Assign to Bin</label>
+                        <select class="form-control" id="binSelect">
+                            <option value="">Loading bins…</option>
+                        </select>
+                    </div>
+
+                    <div class="upload-zone" id="uploadZone">
+                        <div class="upload-icon">📤</div>
+                        <p><strong>Click to select images</strong> or drag &amp; drop</p>
+                        <p style="margin-top:4px;font-size:12px;color:var(--text-muted);">Select multiple files or an
+                            entire folder • PNG, JPG, JPEG</p>
+                        <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
+                        <!-- Hidden folder input -->
+                        <input type="file" id="folderInput" webkitdirectory directory accept="image/*"
+                            style="display:none" />
+                    </div>
+
+                    <div style="text-align:center;margin-top:8px;">
+                        <button class="btn btn-secondary btn-sm" id="folderBtn" style="font-size:12px;">📁 Select Entire
+                            Folder</button>
+                    </div>
+
+                    <!-- Selected files list -->
+                    <div id="fileListWrap" style="display:none;margin-top:16px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <span style="font-size:13px;font-weight:600;" id="fileCountLabel">0 files selected</span>
+                            <button class="btn btn-secondary btn-sm" id="clearFilesBtn"
+                                style="font-size:11px;padding:4px 10px;">✕ Clear All</button>
+                        </div>
+                        <div class="file-list" id="fileList"></div>
+                        <button class="btn btn-primary" style="width:100%;margin-top:16px;padding:14px;font-size:15px;"
+                            id="predictBtn">
+                            🤖 Predict All (<span id="predictCount">0</span> images)
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ══════════ STEP 2: PROCESSING ══════════ -->
+            <div class="step" id="step2">
+                <div class="card" style="max-width:680px;margin:0 auto;text-align:center;padding:48px 24px;">
+                    <div class="spinner" style="width:40px;height:40px;border-width:3px;margin:0 auto 20px;"></div>
+                    <div style="font-size:16px;font-weight:600;" id="processingLabel">Classifying images…</div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-top:6px;" id="processingDetail">Running
+                        MobileNetV2 CNN on each image</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar" style="width:0%"></div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="progressText">0 / 0</div>
+                </div>
+            </div>
+
+            <!-- ══════════ STEP 3: RESULTS TABLE ══════════ -->
+            <div class="step" id="step3">
+                <div class="card" style="margin-bottom:16px;">
+                    <div class="card-header">
+                        <div class="card-title">✅ Classification Results</div>
+                        <div style="display:flex;gap:8px;">
+                            <a href="index.html" class="btn btn-primary btn-sm">📊 Dashboard</a>
+                            <button class="btn btn-secondary btn-sm" id="classifyMoreBtn">🔄 Classify More</button>
+                        </div>
+                    </div>
+
+                    <!-- Summary chips -->
+                    <div class="result-summary" id="resultSummary"></div>
+
+                    <!-- Results table -->
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Filename</th>
+                                    <th>Predicted Type</th>
+                                    <th>Confidence</th>
+                                    <th>Bin</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody id="resultsTableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div style="display:flex;gap:12px;margin-top:20px;">
+                        <a href="index.html" class="btn btn-primary"
+                            style="flex:1;justify-content:center;padding:14px;font-size:14px;">
+                            📊 Go to Dashboard
+                        </a>
+                        <a href="records.html" class="btn btn-secondary"
+                            style="flex:1;justify-content:center;padding:14px;font-size:14px;">
+                            �️ View All Records
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System flow -->
+            <div class="card" style="margin-top:24px;">
+                <div class="card-title" style="margin-bottom:16px;">⚙️ System Flow</div>
+                <div style="display:flex;gap:0;align-items:flex-start;flex-wrap:wrap;">
+                    <div
+                        style="flex:1;min-width:120px;padding:0 14px;text-align:center;border-right:1px solid var(--border);">
+                        <div style="font-size:24px;margin-bottom:6px;">📸</div>
+                        <div style="font-size:12px;font-weight:600;">1. Upload</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Multiple images / folder</div>
+                    </div>
+                    <div
+                        style="flex:1;min-width:120px;padding:0 14px;text-align:center;border-right:1px solid var(--border);">
+                        <div style="font-size:24px;margin-bottom:6px;">🧠</div>
+                        <div style="font-size:12px;font-weight:600;">2. CNN Predict</div>
+                        <div style="font-size:11px;color:var(--text-muted);">MobileNetV2 batch</div>
+                    </div>
+                    <div
+                        style="flex:1;min-width:120px;padding:0 14px;text-align:center;border-right:1px solid var(--border);">
+                        <div style="font-size:24px;margin-bottom:6px;">💾</div>
+                        <div style="font-size:12px;font-weight:600;">3. Save to DB</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Each result recorded</div>
+                    </div>
+                    <div
+                        style="flex:1;min-width:120px;padding:0 14px;text-align:center;border-right:1px solid var(--border);">
+                        <div style="font-size:24px;margin-bottom:6px;">�</div>
+                        <div style="font-size:12px;font-weight:600;">4. Results Table</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Predictions listed</div>
+                    </div>
+                    <div style="flex:1;min-width:120px;padding:0 14px;text-align:center;">
+                        <div style="font-size:24px;margin-bottom:6px;">�</div>
+                        <div style="font-size:12px;font-weight:600;">5. Dashboard</div>
+                        <div style="font-size:11px;color:var(--text-muted);">Charts updated</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script>
+        const EMOJIS = { cardboard: "📦", glass: "🥃", metal: "🔩", paper: "📄", plastic: "🧴", trash: "�️" };
+        const steps = ["step1", "step2", "step3"];
+        let selectedFiles = [];
+
+        function showStep(id) {
+            steps.forEach(s => document.getElementById(s).classList.remove("active"));
+            document.getElementById(id).classList.add("active");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        // ── Load bins ────────────────────────────────────────────────────────────────
+        async function loadBins() {
+            try {
+                const bins = await api.getBins();
+                const sel = document.getElementById("binSelect");
+                sel.innerHTML = bins.map(b => `<option value="${b.bin_id}">Bin #${b.bin_id} — ${b.location}</option>`).join("");
+            } catch (e) {
+                document.getElementById("binSelect").innerHTML = '<option value="">Error loading bins</option>';
+            }
+        }
+
+        // ── Upload zone ──────────────────────────────────────────────────────────────
+        const zone = document.getElementById("uploadZone");
+        const fileInp = document.getElementById("fileInput");
+        const folderInp = document.getElementById("folderInput");
+
+        zone.addEventListener("click", () => fileInp.click());
+        zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag-over"); });
+        zone.addEventListener("dragleave", () => zone.classList.remove("drag-over"));
+        zone.addEventListener("drop", e => {
+            e.preventDefault(); zone.classList.remove("drag-over");
+            addFiles(e.dataTransfer.files);
+        });
+        fileInp.addEventListener("change", () => addFiles(fileInp.files));
+        document.getElementById("folderBtn").addEventListener("click", () => folderInp.click());
+        folderInp.addEventListener("change", () => addFiles(folderInp.files));
+
+        function addFiles(fileList) {
+            const imageFiles = Array.from(fileList).filter(f =>
+                f.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(f.name)
+            );
+            if (imageFiles.length === 0) return showToast("No image files found", "error");
+
+            selectedFiles = [...selectedFiles, ...imageFiles];
+            renderFileList();
+        }
+
+        function renderFileList() {
+            const wrap = document.getElementById("fileListWrap");
+            const list = document.getElementById("fileList");
+
+            if (selectedFiles.length === 0) {
+                wrap.style.display = "none";
+                return;
+            }
+
+            wrap.style.display = "block";
+            document.getElementById("fileCountLabel").textContent = `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`;
+            document.getElementById("predictCount").textContent = selectedFiles.length;
+
+            list.innerHTML = selectedFiles.map((f, i) => {
+                const url = URL.createObjectURL(f);
+                return `<div class="file-item">
+      <img src="${url}" alt="${f.name}"/>
+      <span class="name">${f.name}</span>
+      <span class="size">${(f.size / 1024).toFixed(0)} KB</span>
+      <span class="remove-btn" data-idx="${i}" title="Remove">✕</span>
+    </div>`;
+            }).join("");
+
+            // Remove individual files
+            list.querySelectorAll(".remove-btn").forEach(btn => {
+                btn.addEventListener("click", e => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    selectedFiles.splice(idx, 1);
+                    renderFileList();
+                });
+            });
+        }
+
+        document.getElementById("clearFilesBtn").addEventListener("click", () => {
+            selectedFiles = [];
+            fileInp.value = "";
+            folderInp.value = "";
+            renderFileList();
+        });
+
+        // ── PREDICT ALL ──────────────────────────────────────────────────────────────
+        document.getElementById("predictBtn").addEventListener("click", async () => {
+            const binId = document.getElementById("binSelect").value;
+            if (!binId) return showToast("Select a bin first", "error");
+            if (selectedFiles.length === 0) return;
+
+            showStep("step2");
+
+            const total = selectedFiles.length;
+            const BATCH_SIZE = 5; // send 5 at a time
+            const allResults = [];
+            let processed = 0;
+
+            // Save filenames before sending (the response won't have them)
+            const filenames = selectedFiles.map(f => f.name);
+
+            for (let i = 0; i < total; i += BATCH_SIZE) {
+                const batch = selectedFiles.slice(i, i + BATCH_SIZE);
+                const batchFilenames = filenames.slice(i, i + BATCH_SIZE);
+
+                try {
+                    const results = await api.classifyBatch(binId, batch);
+                    // Attach filenames to results
+                    results.forEach((r, j) => { r._filename = batchFilenames[j]; });
+                    allResults.push(...results);
+                } catch (e) {
+                    // If batch fails, try one by one
+                    for (let j = 0; j < batch.length; j++) {
+                        try {
+                            const r = await api.classifyImage(binId, batch[j]);
+                            r._filename = batchFilenames[j];
+                            allResults.push(r);
+                        } catch (e2) {
+                            allResults.push({ _filename: batchFilenames[j], waste_type: "error", confidence: 0, timestamp: new Date().toISOString(), bin_id: binId, _error: e2.message });
+                        }
+                    }
+                }
+
+                processed = Math.min(i + BATCH_SIZE, total);
+                const pct = Math.round((processed / total) * 100);
+                document.getElementById("progressBar").style.width = pct + "%";
+                document.getElementById("progressText").textContent = `${processed} / ${total} classified`;
+                document.getElementById("processingDetail").textContent =
+                    processed < total ? `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}…` : "Finalizing results…";
+            }
+
+            renderResults(allResults);
+            showStep("step3");
+            showToast(`✓ ${allResults.length} images classified and saved to database`);
+        });
+
+        // ── RENDER RESULTS TABLE ─────────────────────────────────────────────────────
+        function renderResults(results) {
+            // Summary chips
+            const counts = {};
+            results.forEach(r => { counts[r.waste_type] = (counts[r.waste_type] || 0) + 1; });
+            const summaryEl = document.getElementById("resultSummary");
+            const chipColors = { cardboard: "#eab308", glass: "#3b82f6", metal: "#9ca3af", paper: "#10b981", plastic: "#a855f7", trash: "#ef4444" };
+
+            summaryEl.innerHTML = Object.entries(counts).map(([type, count]) => {
+                const color = chipColors[type] || "var(--text-secondary)";
+                const emoji = EMOJIS[type] || "📦";
+                return `<div class="summary-chip">
+      <div style="font-size:20px;">${emoji}</div>
+      <div class="count" style="color:${color}">${count}</div>
+      <div class="label">${type}</div>
+    </div>`;
+            }).join("");
+
+            // Results table
+            const tbody = document.getElementById("resultsTableBody");
+            tbody.innerHTML = results.map((r, i) => {
+                const conf = (r.confidence * 100).toFixed(1);
+                const confColor = conf >= 80 ? "var(--accent)" : conf >= 50 ? "var(--yellow)" : "var(--red)";
+                return `<tr>
+      <td class="td-id">${i + 1}</td>
+      <td style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r._filename || ''}">${r._filename || 'image_' + (i + 1)}</td>
+      <td>${wasteBadge(r.waste_type)}</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:80px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
+            <div style="height:100%;width:${conf}%;background:${confColor};border-radius:3px;"></div>
+          </div>
+          <span style="font-size:12px;font-weight:600;color:${confColor}">${conf}%</span>
+        </div>
+      </td>
+      <td class="td-muted">#${r.bin_id}</td>
+      <td class="td-muted">${formatDate(r.timestamp)}</td>
+    </tr>`;
+            }).join("");
+        }
+
+        // ── Classify More ────────────────────────────────────────────────────────────
+        document.getElementById("classifyMoreBtn").addEventListener("click", () => {
+            selectedFiles = [];
+            fileInp.value = "";
+            folderInp.value = "";
+            document.getElementById("fileListWrap").style.display = "none";
+            document.getElementById("progressBar").style.width = "0%";
+            showStep("step1");
+        });
+
+        loadBins();
+    </script>
+</body>
+
+</html>

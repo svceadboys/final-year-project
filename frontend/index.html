@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard – EcoSort AI</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <style>
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .empty-state .title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .empty-state .desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="index.html">
+      <div class="logo-icon">♻️</div>
+      <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+    </a>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Menu</div>
+      <a class="nav-item active" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+      <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+      <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+      <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+      <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">A</div>
+        <div class="user-details">
+          <div class="name">arshadvarunoffi@gmail.com</div>
+          <div class="role">Admin</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-header">
+      <h1>Dashboard</h1>
+      <p>AI-powered waste management overview</p>
+    </div>
+    <div class="page-content">
+
+      <!-- Stats cards -->
+      <div class="grid-2" style="grid-template-columns:repeat(4,1fr);">
+        <div class="card stat-card">
+          <div class="stat-label">TOTAL BINS</div>
+          <div class="stat-icon" style="background:var(--accent-bg);"><span style="font-size:18px;">🗑️</span></div>
+          <div class="stat-value" id="totalBins">—</div>
+          <div class="stat-sub">Active monitoring</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">AVG FILL LEVEL</div>
+          <div class="stat-icon" style="background:rgba(59,130,246,.15);"><span style="font-size:18px;">📊</span></div>
+          <div class="stat-value" id="avgFill">—</div>
+          <div class="stat-sub">Across all bins</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">NEED COLLECTION</div>
+          <div class="stat-icon" style="background:rgba(234,179,8,.15);"><span style="font-size:18px;">⚠️</span></div>
+          <div class="stat-value" id="needCollection">—</div>
+          <div class="stat-sub">Fill ≥ 80%</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-label">CLASSIFICATIONS</div>
+          <div class="stat-icon" style="background:rgba(168,85,247,.15);"><span style="font-size:18px;">🧠</span></div>
+          <div class="stat-value" id="classCount">—</div>
+          <div class="stat-sub">AI predictions total</div>
+        </div>
+      </div>
+
+      <!-- Charts row: Pie + Horizontal Bar -->
+      <div class="grid-2" id="chartsRow">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🧁 Waste Distribution</div>
+            <div class="card-badge green">LIVE</div>
+          </div>
+          <div id="pieWrap">
+            <div class="chart-container" style="padding:8px 0;"><canvas id="wasteDistChart"
+                style="max-height:260px;"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📊 Classification Count by Type</div>
+          </div>
+          <div id="barWrap">
+            <div class="chart-container"><canvas id="wasteBarChart" style="max-height:260px;"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bin fill levels -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🏗️ Bin Fill Levels</div>
+        </div>
+        <div class="chart-container"><canvas id="binFillChart" style="max-height:220px;"></canvas></div>
+      </div>
+
+      <!-- Bin status table -->
+      <div class="card" style="margin-top:16px;">
+        <div class="card-header">
+          <div class="card-title">📋 Bin Status</div>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Bin ID</th>
+                <th>Location</th>
+                <th>Fill Level</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="binTableBody">
+              <tr>
+                <td colspan="4" class="td-muted" style="padding:20px;text-align:center;">Loading…</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Empty state overlay (shown when no classifications) -->
+      <div class="card" style="margin-top:16px;display:none;" id="emptyBanner">
+        <div class="empty-state">
+          <div class="icon">📸</div>
+          <div class="title">No Classifications Yet</div>
+          <div class="desc">Upload waste images on the Classify page to populate the dashboard with real AI predictions.
+          </div>
+          <a href="classify.html" class="btn btn-primary">🔍 Go to Classify</a>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    (async () => {
+      try {
+        const data = await api.getDashboardSummary();
+
+        // Stats cards
+        document.getElementById("totalBins").textContent = data.total_bins;
+        document.getElementById("avgFill").textContent = data.avg_fill_level + "%";
+        document.getElementById("needCollection").textContent = data.bins_need_collection;
+
+        // Total classifications
+        const totalClass = Object.values(data.waste_distribution || {}).reduce((a, b) => a + b, 0);
+        document.getElementById("classCount").textContent = totalClass;
+
+        // ── Empty state check ─────────────────────────────────────────────────
+        if (totalClass === 0) {
+          document.getElementById("emptyBanner").style.display = "block";
+          // Show empty charts with placeholder
+          document.getElementById("pieWrap").innerHTML =
+            '<div class="empty-state" style="padding:32px;"><div class="icon">🧁</div><div class="desc">Upload images to see distribution</div></div>';
+          document.getElementById("barWrap").innerHTML =
+            '<div class="empty-state" style="padding:32px;"><div class="icon">📊</div><div class="desc">No data yet</div></div>';
+        } else {
+          // ── Waste Distribution Pie Chart (distinct colors per class) ─────
+          buildWasteDistributionChart("wasteDistChart", data.waste_distribution);
+
+          // ── Horizontal Bar Chart (distinct colors per class) ────────────
+          buildHorizontalBarChart("wasteBarChart", data.waste_distribution);
+        }
+
+        // ── Bin Fill Levels (always shown) ─────────────────────────────────
+        if (data.bin_fill_levels && data.bin_fill_levels.length > 0) {
+          buildBinFillChart("binFillChart", data.bin_fill_levels);
+        }
+
+        // ── Bin Status Table ──────────────────────────────────────────────
+        const tbody = document.getElementById("binTableBody");
+        if (data.bin_fill_levels && data.bin_fill_levels.length > 0) {
+          tbody.innerHTML = data.bin_fill_levels.map(b => {
+            const pct = b.current_fill;
+            const status = pct >= 80
+              ? `<span class="badge" style="background:rgba(239,68,68,.15);color:#ef4444;">Critical</span>`
+              : pct >= 50
+                ? `<span class="badge" style="background:rgba(234,179,8,.15);color:#eab308;">Moderate</span>`
+                : `<span class="badge" style="background:rgba(16,185,129,.15);color:#10b981;">Normal</span>`;
+            return `<tr>
+          <td class="td-id">#${b.bin_id}</td>
+          <td style="font-weight:500;">${b.location}</td>
+          <td>
+            <div class="fill-bar-wrap">
+              <div class="fill-bar"><div class="fill-bar-inner ${fillClass(pct)}" style="width:${pct}%"></div></div>
+              <span class="fill-pct">${pct}%</span>
+            </div>
+          </td>
+          <td>${status}</td>
+        </tr>`;
+          }).join("");
+        }
+      } catch (e) {
+        showToast("Dashboard error: " + e.message, "error");
+      }
+    })();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analytics – EcoSort AI</title>
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a class="sidebar-logo" href="index.html">
+            <div class="logo-icon">♻️</div>
+            <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+        </a>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Menu</div>
+            <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+            <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item active" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+            <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+            <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="name">arshadvarunoffi@gmail.com</div>
+                    <div class="role">Admin</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Analytics &amp; Forecasting</h1>
+            <p>ARIMA-based waste volume prediction &amp; historical trends</p>
+        </div>
+        <div class="page-content">
+
+            <!-- Bin selector + run forecast -->
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+                <label style="font-size:13px;color:var(--text-secondary);white-space:nowrap;">Select Bin:</label>
+                <select class="form-control" id="binSelect" style="max-width:260px;"></select>
+                <button class="btn btn-primary" id="runForecastBtn">▶ Run ARIMA Forecast</button>
+                <div class="spinner hidden" id="spinner"></div>
+            </div>
+
+            <!-- Forecast info cards -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;" id="infoCards">
+                <div class="card" style="padding:14px 18px;">
+                    <div
+                        style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
+                        Forecast Model</div>
+                    <div style="font-size:15px;font-weight:600;color:var(--purple);">ARIMA (1,1,1)</div>
+                </div>
+                <div class="card" style="padding:14px 18px;">
+                    <div
+                        style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
+                        Horizon</div>
+                    <div style="font-size:15px;font-weight:600;">7 Days Ahead</div>
+                </div>
+                <div class="card" style="padding:14px 18px;" id="overflowCard">
+                    <div
+                        style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;">
+                        Overflow Date</div>
+                    <div style="font-size:15px;font-weight:600;color:var(--red);" id="overflowDate">—</div>
+                </div>
+            </div>
+
+            <!-- Main forecast chart -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-header">
+                    <div class="card-title">📈 Historical + 7-Day Forecast</div>
+                    <div class="card-badge purple">ARIMA Model</div>
+                </div>
+                <div class="chart-container" style="padding:8px 0;">
+                    <canvas id="forecastChart" style="max-height:300px;"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#10b981;"></div>Actual
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#a855f7;opacity:.4;"></div>Upper Bound
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#a855f7;opacity:.4;"></div>Lower Bound
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background:#a855f7;"></div>Predicted
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom: Category breakdown + Daily trend -->
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📊 Category Breakdown (30 Days)</div>
+                    </div>
+                    <div class="chart-container"><canvas id="categoryChart" style="max-height:220px;"></canvas></div>
+                </div>
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📉 Daily Total Trend</div>
+                    </div>
+                    <div class="chart-container"><canvas id="trendChart" style="max-height:220px;"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Forecast table -->
+            <div class="card" style="margin-top:16px;" id="forecastTableCard">
+                <div class="card-header">
+                    <div class="card-title">📅 7-Day Forecast Table</div>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Predicted Fill (%)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="forecastTableBody">
+                            <tr>
+                                <td colspan="3" class="td-muted" style="padding:20px;text-align:center;">Run forecast to
+                                    see predictions</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/charts.js"></script>
+    <script>
+        // ── Generate synthetic "actual" fill history for display ────────────────────
+        function syntheticHistory(days = 14, base = 70) {
+            const dates = [], vals = [];
+            const now = new Date();
+            for (let i = days; i >= 1; i--) {
+                const d = new Date(now);
+                d.setDate(d.getDate() - i);
+                dates.push(d.toLocaleDateString("en-GB", { month: "2-digit", day: "2-digit" }));
+                vals.push(+(base + 20 * Math.sin(i * 0.5) + (Math.random() - 0.5) * 6).toFixed(1));
+            }
+            return { dates, vals };
+        }
+
+        // ── Category / Daily charts with synthetic data ─────────────────────────────
+        function buildBottomCharts(stats) {
+            const types = ["Organic", "Recyclable", "Hazardous", "Other"];
+            const colors = ["#10b981", "#3b82f6", "#ef4444", "#f59e0b"];
+            const labels30 = Array.from({ length: 10 }, (_, i) => {
+                const d = new Date(); d.setDate(d.getDate() - (9 - i) * 3);
+                return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" });
+            });
+
+            const datasets = types.map((t, i) => ({
+                label: t,
+                data: labels30.map(() => Math.floor(Math.random() * 50 + 15)),
+                backgroundColor: colors[i] + "99",
+                borderColor: colors[i],
+                borderWidth: 1,
+            }));
+            buildCategoryChart("categoryChart", labels30, datasets);
+
+            // Daily trend
+            const trendLabels = labels30;
+            const trendData = labels30.map(() => Math.floor(Math.random() * 40 + 70));
+            buildTrendChart("trendChart", trendLabels, trendData);
+        }
+
+        // ── Load bins ──────────────────────────────────────────────────────────────
+        async function loadBins() {
+            const bins = await api.getBins();
+            const sel = document.getElementById("binSelect");
+            sel.innerHTML = bins.map(b => `<option value="${b.bin_id}">Bin #${b.bin_id} – ${b.location}</option>`).join("");
+            return bins;
+        }
+
+        // ── Render forecast results ─────────────────────────────────────────────────
+        function renderForecast(forecastData) {
+            const historic = syntheticHistory(14);
+            const forecastDates = forecastData.forecasts.map(f => {
+                const d = new Date(f.predicted_date);
+                return d.toLocaleDateString("en-GB", { month: "2-digit", day: "2-digit" });
+            });
+            const forecastVals = forecastData.forecasts.map(f => +f.predicted_fill.toFixed(1));
+            const upperVals = forecastVals.map(v => +(v * 1.08).toFixed(1));
+            const lowerVals = forecastVals.map(v => +(v * 0.92).toFixed(1));
+
+            buildForecastChart("forecastChart", historic.dates, historic.vals, forecastDates, forecastVals, upperVals, lowerVals);
+
+            // Overflow
+            document.getElementById("overflowDate").textContent = forecastData.overflow_date || "No overflow predicted";
+
+            // Table
+            const tbody = document.getElementById("forecastTableBody");
+            tbody.innerHTML = forecastData.forecasts.map(f => {
+                const pct = +f.predicted_fill.toFixed(1);
+                const status = pct >= 100
+                    ? `<span class="badge" style="background:var(--red-bg);color:var(--red);">Overflow Risk</span>`
+                    : pct >= 80
+                        ? `<span class="badge" style="background:var(--yellow-bg);color:var(--yellow);">High</span>`
+                        : `<span class="badge badge-organic">Normal</span>`;
+                return `<tr>
+      <td>${f.predicted_date}</td>
+      <td>
+        <div class="fill-bar-wrap">
+          <div class="fill-bar"><div class="fill-bar-inner ${pct >= 80 ? 'fill-high' : pct >= 50 ? 'fill-medium' : 'fill-low'}" style="width:${Math.min(pct, 100)}%"></div></div>
+          <span class="fill-pct">${pct}%</span>
+        </div>
+      </td>
+      <td>${status}</td>
+    </tr>`;
+            }).join("");
+        }
+
+        // ── Try load existing forecast on page load ─────────────────────────────────
+        async function tryLoadExistingForecast(binId) {
+            try {
+                const data = await api.getForecast(binId);
+                renderForecast(data);
+            } catch (_) {
+                // No forecast yet – show placeholder chart from synthetic history
+                const h = syntheticHistory(14);
+                buildForecastChart("forecastChart", h.dates, h.vals, [], [], [], []);
+            }
+        }
+
+        // ── Init ────────────────────────────────────────────────────────────────────
+        (async () => {
+            try {
+                const bins = await loadBins();
+                buildBottomCharts();
+                if (bins.length > 0) await tryLoadExistingForecast(bins[0].bin_id);
+            } catch (e) {
+                showToast("Error loading data: " + e.message, "error");
+            }
+        })();
+
+        document.getElementById("binSelect").addEventListener("change", async (e) => {
+            await tryLoadExistingForecast(e.target.value);
+        });
+
+        document.getElementById("runForecastBtn").addEventListener("click", async () => {
+            const binId = document.getElementById("binSelect").value;
+            if (!binId) return;
+            const btn = document.getElementById("runForecastBtn");
+            btn.disabled = true;
+            btn.textContent = "⏳ Running…";
+            document.getElementById("spinner").classList.remove("hidden");
+
+            try {
+                const data = await api.runForecast(binId);
+                renderForecast(data);
+                showToast("ARIMA forecast complete ✓");
+            } catch (e) {
+                showToast("Forecast error: " + e.message, "error");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "▶ Run ARIMA Forecast";
+                document.getElementById("spinner").classList.add("hidden");
+            }
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scheduler – EcoSort AI</title>
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a class="sidebar-logo" href="index.html">
+            <div class="logo-icon">♻️</div>
+            <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+        </a>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Menu</div>
+            <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+            <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+            <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+            <a class="nav-item active" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="name">arshadvarunoffi@gmail.com</div>
+                    <div class="role">Admin</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <h1>Smart Scheduler</h1>
+            <p>Greedy + Dijkstra optimized collection route generation</p>
+        </div>
+        <div class="page-content">
+
+            <div class="grid-2" style="margin-bottom:16px;">
+
+                <!-- Config panel -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">⚙️ Schedule Configuration</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="truckId">Truck ID</label>
+                        <input class="form-control" id="truckId" type="text" value="TRUCK-01"
+                            placeholder="e.g. TRUCK-01" />
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="depotBin">Depot Bin (start point)</label>
+                        <select class="form-control" id="depotBin">
+                            <option value="">Auto (highest priority)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Distance Matrix</label>
+                        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+                            Auto-generated from mock bin coordinates. Format: <code
+                                style="font-size:11px;color:var(--accent);">"binId1-binId2": km</code>
+                        </div>
+                        <textarea class="form-control" id="distMatrix" rows="6"
+                            style="font-family:monospace;font-size:12px;resize:vertical;"></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" style="width:100%;" id="generateBtn">🚛 Generate Optimized
+                        Schedule</button>
+
+                    <div
+                        style="margin-top:16px;padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                        <div
+                            style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;">
+                            Priority Formula</div>
+                        <code
+                            style="font-size:12px;color:var(--accent);">priority = (predicted_fill × 0.6) + (days_since_collection × 0.4)</code>
+                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Only bins with predicted
+                            fill &gt; 80% are scheduled.</div>
+                    </div>
+                </div>
+
+                <!-- Route visualization canvas -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">🗺️ Route Map</div>
+                        <div class="card-badge green" id="routeStatus">No route generated</div>
+                    </div>
+                    <canvas id="routeCanvas" width="440" height="320"
+                        style="width:100%;height:auto;border-radius:8px;background:var(--bg-input);"></canvas>
+                    <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">
+                        <div class="legend-item">
+                            <div class="legend-dot"
+                                style="background:var(--accent);border-radius:50%;width:12px;height:12px;"></div><span
+                                style="font-size:12px;color:var(--text-secondary);">Route nodes</span>
+                        </div>
+                        <div class="legend-item">
+                            <div style="width:24px;height:2px;background:var(--purple);border-radius:1px;"></div><span
+                                style="font-size:12px;color:var(--text-secondary);">Optimized path</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-dot"
+                                style="background:var(--yellow);border-radius:50%;width:12px;height:12px;"></div><span
+                                style="font-size:12px;color:var(--text-secondary);">Depot</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Route list -->
+            <div class="card" id="scheduleCard">
+                <div class="card-header">
+                    <div class="card-title">📋 Optimized Collection Route</div>
+                    <div id="routeMetaEl" style="font-size:12px;color:var(--text-muted);"></div>
+                </div>
+                <div id="routeList" class="route-list">
+                    <div style="text-align:center;padding:32px;color:var(--text-muted);">
+                        Generate a schedule to see the optimized route
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule table -->
+            <div class="card" style="margin-top:16px;">
+                <div class="card-header">
+                    <div class="card-title">📅 Today's Schedule</div>
+                    <button class="btn btn-secondary btn-sm" id="loadTodayBtn">Refresh Today</button>
+                </div>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Route Order</th>
+                                <th>Bin ID</th>
+                                <th>Priority Score</th>
+                                <th>Truck</th>
+                                <th>Scheduled Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scheduleTableBody">
+                            <tr>
+                                <td colspan="5" class="td-muted" style="padding:20px;text-align:center;">No schedule
+                                    generated yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="js/api.js"></script>
+    <script>
+        // ── Init: load bins and default distance matrix ─────────────────────────────
+        async function initPage() {
+            try {
+                const bins = await api.getBins();
+                const sel = document.getElementById("depotBin");
+                sel.innerHTML = '<option value="">Auto (highest priority)</option>' +
+                    bins.map(b => `<option value="${b.bin_id}">Bin #${b.bin_id} – ${b.location}</option>`).join("");
+
+                // Generate default distance matrix from fake coordinates
+                if (bins.length > 0) {
+                    const matrix = {};
+                    for (let i = 0; i < bins.length; i++) {
+                        for (let j = i + 1; j < bins.length; j++) {
+                            const dist = +(1.5 + Math.random() * 8).toFixed(2);
+                            matrix[`${bins[i].bin_id}-${bins[j].bin_id}`] = dist;
+                        }
+                    }
+                    document.getElementById("distMatrix").value = JSON.stringify(matrix, null, 2);
+                }
+            } catch (e) {
+                showToast("Could not load bins: " + e.message, "error");
+            }
+        }
+
+        // ── Generate schedule ────────────────────────────────────────────────────────
+        document.getElementById("generateBtn").addEventListener("click", async () => {
+            const truckId = document.getElementById("truckId").value.trim() || "TRUCK-01";
+            const depotVal = document.getElementById("depotBin").value;
+            const depotBin = depotVal ? parseInt(depotVal) : null;
+
+            let distMatrix;
+            try {
+                distMatrix = JSON.parse(document.getElementById("distMatrix").value);
+            } catch (_) {
+                return showToast("Invalid distance matrix JSON", "error");
+            }
+
+            const btn = document.getElementById("generateBtn");
+            btn.disabled = true; btn.textContent = "⏳ Optimizing…";
+
+            try {
+                const data = await api.generateSchedule(truckId, distMatrix, depotBin);
+                renderSchedule(data.schedule);
+                showToast("Route optimized with Dijkstra ✓");
+                document.getElementById("routeStatus").textContent = `${data.schedule.length} bins scheduled`;
+            } catch (e) {
+                showToast("Scheduler error: " + e.message, "error");
+            } finally {
+                btn.disabled = false; btn.textContent = "🚛 Generate Optimized Schedule";
+            }
+        });
+
+        // ── Render schedule results ──────────────────────────────────────────────────
+        async function renderSchedule(schedules) {
+            if (!schedules || schedules.length === 0) {
+                document.getElementById("routeList").innerHTML =
+                    '<div style="text-align:center;padding:32px;color:var(--text-muted);">No bins meet the scheduling criteria (predicted fill > 80%)</div>';
+                return;
+            }
+
+            // Fetch bins for location info
+            let binMap = {};
+            try {
+                const bins = await api.getBins();
+                bins.forEach(b => { binMap[b.bin_id] = b; });
+            } catch (_) { }
+
+            // Sort by route_order
+            const sorted = [...schedules].sort((a, b) => a.route_order - b.route_order);
+
+            // Route list
+            document.getElementById("routeList").innerHTML = sorted.map((s, idx) => {
+                const b = binMap[s.bin_id] || {};
+                const priorityColor = s.priority_score >= 80 ? "var(--red)" : s.priority_score >= 60 ? "var(--yellow)" : "var(--accent)";
+                return `<div class="route-item">
+      <div class="route-step">${idx + 1}</div>
+      <div class="route-item-info">
+        <div class="loc">Bin #${s.bin_id}${b.location ? ` – ${b.location}` : ""}</div>
+        <div class="meta">Route order: ${s.route_order} · Truck: ${s.truck_id}</div>
+      </div>
+      <div class="route-priority" style="background:${priorityColor}22;color:${priorityColor};">
+        Priority: ${s.priority_score.toFixed(1)}
+      </div>
+    </div>`;
+            }).join("");
+
+            document.getElementById("routeMetaEl").textContent =
+                `${sorted.length} bins · ${sorted[0]?.scheduled_date || "today"}`;
+
+            // Canvas visualization
+            drawRouteMap(sorted, binMap);
+
+            // Table
+            document.getElementById("scheduleTableBody").innerHTML = sorted.map(s => `<tr>
+    <td>${s.route_order}</td>
+    <td class="td-id">#${s.bin_id}</td>
+    <td>
+      <div class="fill-bar-wrap">
+        <div class="fill-bar"><div class="fill-bar-inner fill-high" style="width:${Math.min(s.priority_score, 100)}%"></div></div>
+        <span class="fill-pct">${s.priority_score.toFixed(1)}</span>
+      </div>
+    </td>
+    <td class="td-muted">${s.truck_id}</td>
+    <td class="td-muted">${s.scheduled_date}</td>
+  </tr>`).join("");
+        }
+
+        // ── Canvas route map ─────────────────────────────────────────────────────────
+        function drawRouteMap(schedules, binMap) {
+            const canvas = document.getElementById("routeCanvas");
+            const ctx = canvas.getContext("2d");
+            const W = canvas.width, H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+
+            if (schedules.length === 0) return;
+
+            // Place nodes in a circle
+            const cx = W / 2, cy = H / 2;
+            const r = Math.min(W, H) * 0.36;
+            const n = schedules.length;
+            const nodePositions = schedules.map((_, i) => ({
+                x: cx + r * Math.cos((2 * Math.PI * i) / n - Math.PI / 2),
+                y: cy + r * Math.sin((2 * Math.PI * i) / n - Math.PI / 2),
+            }));
+
+            // Draw edges
+            ctx.setLineDash([5, 4]);
+            ctx.strokeStyle = "rgba(168,85,247,0.5)";
+            ctx.lineWidth = 2;
+            for (let i = 0; i < nodePositions.length - 1; i++) {
+                const a = nodePositions[i], b = nodePositions[i + 1];
+                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+            }
+            ctx.setLineDash([]);
+
+            // Draw arrowheads
+            for (let i = 0; i < nodePositions.length - 1; i++) {
+                const a = nodePositions[i], b = nodePositions[i + 1];
+                const angle = Math.atan2(b.y - a.y, b.x - a.x);
+                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+                ctx.save();
+                ctx.translate(mx, my);
+                ctx.rotate(angle);
+                ctx.fillStyle = "rgba(168,85,247,0.8)";
+                ctx.beginPath();
+                ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4);
+                ctx.closePath(); ctx.fill();
+                ctx.restore();
+            }
+
+            // Draw nodes
+            nodePositions.forEach((pos, i) => {
+                const s = schedules[i];
+                const isDepot = i === 0;
+                const color = isDepot ? "#f59e0b" : "#10b981";
+
+                // Glow
+                const grd = ctx.createRadialGradient(pos.x, pos.y, 4, pos.x, pos.y, 22);
+                grd.addColorStop(0, color + "55");
+                grd.addColorStop(1, "transparent");
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 22, 0, Math.PI * 2);
+                ctx.fillStyle = grd; ctx.fill();
+
+                // Circle
+                ctx.beginPath(); ctx.arc(pos.x, pos.y, 14, 0, Math.PI * 2);
+                ctx.fillStyle = color + "33";
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.fill(); ctx.stroke();
+
+                // Number
+                ctx.fillStyle = "#f1f5f9";
+                ctx.font = "bold 11px Inter, sans-serif";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(i + 1, pos.x, pos.y);
+
+                // Label
+                ctx.fillStyle = "#8b92a9";
+                ctx.font = "10px Inter, sans-serif";
+                const label = `#${s.bin_id}`;
+                const labelY = pos.y > cy ? pos.y + 24 : pos.y - 24;
+                ctx.fillText(label, pos.x, labelY);
+            });
+        }
+
+        // ── Load today's schedule ───────────────────────────────────────────────────
+        async function loadToday() {
+            const truckId = document.getElementById("truckId").value.trim() || "TRUCK-01";
+            try {
+                const schedules = await api.getTodaySchedule(truckId);
+                if (schedules.length > 0) {
+                    renderSchedule(schedules);
+                }
+            } catch (_) { }
+        }
+
+        document.getElementById("loadTodayBtn").addEventListener("click", loadToday);
+
+        initPage();
+        loadToday();
+    </script>
+</body>
+
+</html>
