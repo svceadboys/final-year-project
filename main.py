@@ -7,11 +7,21 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.routes import classification, forecast, scheduler, bins, fleet, auth
-from app.routes import records
+from app.routes.classification import router as classification_router
+from app.routes.forecast import router as forecast_router
+from app.routes.scheduler import router as scheduler_router
+from app.routes.bins import router as bins_router
+from app.routes.fleet import router as fleet_router
+from app.routes.auth import router as auth_router
+from app.routes.records import router as records_router
+
 from app.database.session import get_db, SessionLocal, engine
 from app.database.session import Base
-from app.models import Bin, Classification, Forecast as ForecastModel, Truck
+
+from app.models.bin import Bin
+from app.models.classification import Classification
+from app.models.forecast import Forecast as ForecastModel
+from app.models.truck import Truck
 from app.api.deps import get_current_admin
 from datetime import date
 
@@ -31,23 +41,22 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+    app.include_router(auth_router, prefix="/api/auth", tags=["Auth"])
     
-    app.include_router(classification.router, prefix="/api/classification", tags=["Classification"], dependencies=[Depends(get_current_admin)])
-    app.include_router(forecast.router,       prefix="/api/forecast",       tags=["Forecast"], dependencies=[Depends(get_current_admin)])
-    app.include_router(scheduler.router,      prefix="/api/scheduler",      tags=["Scheduler"], dependencies=[Depends(get_current_admin)])
-    app.include_router(bins.router,           prefix="/api/bins",           tags=["Bins"], dependencies=[Depends(get_current_admin)])
-    app.include_router(records.router,        prefix="/api/records",        tags=["Records"], dependencies=[Depends(get_current_admin)])
-    app.include_router(fleet.router,          prefix="/api/fleet",          tags=["Fleet Management"], dependencies=[Depends(get_current_admin)])
+    app.include_router(classification_router, prefix="/api/classification", tags=["Classification"], dependencies=[Depends(get_current_admin)])
+    app.include_router(forecast_router,       prefix="/api/forecast",       tags=["Forecast"], dependencies=[Depends(get_current_admin)])
+    app.include_router(scheduler_router,      prefix="/api/scheduler",      tags=["Scheduler"], dependencies=[Depends(get_current_admin)])
+    app.include_router(bins_router,           prefix="/api/bins",           tags=["Bins"], dependencies=[Depends(get_current_admin)])
+    app.include_router(records_router,        prefix="/api/records",        tags=["Records"], dependencies=[Depends(get_current_admin)])
+    app.include_router(fleet_router,          prefix="/api/fleet",          tags=["Fleet Management"], dependencies=[Depends(get_current_admin)])
 
     @app.on_event("startup")
     def startup_db_seed():
         """Ensure the SQLite DB is created and seeded with Chennai mock data if empty."""
         Base.metadata.create_all(bind=engine)
         with SessionLocal() as db:
-            if db.query(Truck).count() == 0:
-                print("Seeding fresh Chennai database...")
-                # 1. Seed Bins
+            if db.query(Bin).count() == 0:
+                print("Seeding Bins...")
                 bin_data = [
                     {"location": "Main Gate - Block A", "capacity": 100.0, "current_fill": 85.0, "lat": 13.0827, "lng": 80.2707},
                     {"location": "Cafeteria - Block B", "capacity": 150.0, "current_fill": 90.0, "lat": 13.0835, "lng": 80.2715},
@@ -56,14 +65,20 @@ def create_app() -> FastAPI:
                     {"location": "Auditorium - Block E","capacity": 120.0, "current_fill": 45.0, "lat": 13.0820, "lng": 80.2680},
                 ]
                 for b in bin_data: db.add(Bin(**b))
+                db.commit()
                 
-                # 2. Seed Trucks
-                truck_data = [
-                    {"truck_id": "TRK-001", "status": "idle", "current_lat": 13.0810, "current_lng": 80.2700},
-                    {"truck_id": "TRK-002", "status": "idle", "current_lat": 13.0850, "current_lng": 80.2720},
-                    {"truck_id": "TRK-003", "status": "idle", "current_lat": 13.0830, "current_lng": 80.2690},
-                ]
-                for t in truck_data: db.add(Truck(**t))
+            current_trucks = db.query(Truck).count()
+            if current_trucks < 24:
+                print(f"Seeding {24 - current_trucks} additional Trucks in Chennai...")
+                import random
+                for i in range(current_trucks + 1, 25):
+                    t = {
+                        "truck_id": f"TRK-{i:03d}",
+                        "status": "idle",
+                        "current_lat": round(13.08 + (random.uniform(-0.03, 0.03)), 4),
+                        "current_lng": round(80.27 + (random.uniform(-0.03, 0.03)), 4)
+                    }
+                    db.add(Truck(**t))
                 db.commit()
 
     @app.get("/api/dashboard/summary", tags=["Dashboard"])
