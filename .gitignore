@@ -1,0 +1,31 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# Local environment files
+.env
+
+# Logs
+*.log
+
+# Local databases / artifacts
+*.db
+*.sqlite
+*.sqlite3
+
+# ML artifacts (keep if you want to version models)
+app/ml/saved_model.h5
+app/ml/classes.json
+app/ml/metrics.txt
+

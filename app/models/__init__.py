@@ -3,6 +3,7 @@ from .classification import Classification
 from .forecast import Forecast
 from .schedule import Schedule
 from .fill_history import BinFillHistory
+from .truck import Truck
 
 __all__ = [
     "Bin",
@@ -10,5 +11,6 @@ __all__ = [
     "Forecast",
     "Schedule",
     "BinFillHistory",
+    "Truck",
 ]
 

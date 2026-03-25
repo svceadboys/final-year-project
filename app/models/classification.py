@@ -13,6 +13,7 @@ class Classification(Base):
     bin_id = Column(Integer, ForeignKey("bins.bin_id"), nullable=False, index=True)
     waste_type = Column(String(50), nullable=False)
     confidence = Column(Float, nullable=False)
+    predicted_fill = Column(Float, nullable=True, default=0.0)
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
 
     bin = relationship("Bin", backref="classifications")

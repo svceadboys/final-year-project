@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Needs Action – EcoSort AI</title>
+    <link rel="stylesheet" href="css/styles.css" />
+    <style>
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .action-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .huge-error-state {
+            text-align: center;
+            padding: 64px 24px;
+            color: var(--text-muted);
+        }
+
+        .huge-error-state .icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.8;
+        }
+
+        /* Mission Cards */
+        .missions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .mission-item {
+            background: var(--bg-input);
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            border-radius: 8px;
+            padding: 16px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .mission-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--red);
+        }
+    </style>
+    <script src="js/auth.js"></script>
+</head>
+
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <a class="sidebar-logo" href="index.html">
+            <div class="logo-icon">♻️</div>
+            <div class="logo-text"><strong>EcoSort AI</strong><span>Waste Intelligence</span></div>
+        </a>
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">Menu</div>
+            <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
+            <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item active" href="pending.html"><span class="nav-icon">🚨</span><span>Needs Action</span></a>
+            <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
+            <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
+            <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+        </nav>
+        <div class="sidebar-footer">
+            <div class="user-info">
+                <div class="user-avatar">A</div>
+                <div class="user-details">
+                    <div class="name">arshadvarunoffi@gmail.com</div>
+                    <div class="role">Admin</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main">
+        <div class="page-header">
+            <div>
+                <h1>🚨 Needs Action</h1>
+                <p>Isolated list of critical bins lacking truck assignments</p>
+            </div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-primary" id="massDeployBtn" style="background:var(--red); border:none;" onclick="massDeploy(this)">
+                    Deploy All Fleet
+                </button>
+            </div>
+        </div>
+        
+        <div class="page-content">
+            <div class="action-card">
+                <h3 style="margin-top:0; color:var(--text-primary); display:flex; justify-content:space-between; align-items:center;">
+                    <span>Awaiting Dispatch Queue</span>
+                    <span class="badge" style="background:var(--red); color:white; font-size:14px;" id="queueCount">0 Critical Bins</span>
+                </h3>
+                
+                <div id="missionsContainer">
+                    <div class="huge-error-state">
+                        <div class="icon">🔄</div>
+                        <h2>Scanning systems...</h2>
+                        <p>Locating unassigned critical bins.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/api.js?v=3"></script>
+    <script>
+        // Formatter helper
+        function timeAgo(dateString) {
+            if (!dateString) return "Never";
+            const diff = Date.now() - new Date(dateString).getTime();
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            if (days === 0) return "Today";
+            if (days === 1) return "1 day ago";
+            return `${days} days ago`;
+        }
+
+        async function loadQueue() {
+            try {
+                // Fetch pure pending data
+                const pendingBins = await apiFetch('/api/fleet/pending');
+                const container = document.getElementById("missionsContainer");
+                document.getElementById("queueCount").textContent = `${pendingBins.length} Critical Bins`;
+                
+                if (pendingBins.length === 0) {
+                    container.innerHTML = `
+                    <div class="huge-error-state" style="color:var(--green);">
+                        <div class="icon">🎯</div>
+                        <h2>All Clear!</h2>
+                        <p>There are zero unassigned critical bins in the city.</p>
+                        <a href="scheduler.html" class="btn btn-secondary" style="margin-top:16px;">View Fleet Status</a>
+                    </div>`;
+                    return;
+                }
+                
+                // Render cards
+                let html = `<div class="missions-grid">`;
+                pendingBins.forEach(b => {
+                    html += `
+                        <div class="mission-item">
+                            <div style="display:flex; justify-content:space-between;">
+                                <div>
+                                    <div style="font-size:18px; font-weight:700;">Bin #${b.bin_id}</div>
+                                    <div style="font-size:12px; color:var(--text-muted); margin-top:2px;">${b.location}</div>
+                                </div>
+                                <div style="text-align:right;">
+                                    <div style="font-size:20px; font-weight:800; color:var(--red);">${b.current_fill}%</div>
+                                    <div style="font-size:11px; color:var(--text-muted);">Capacity</div>
+                                </div>
+                            </div>
+                            
+                            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.05); padding:8px 12px; border-radius:6px; margin-top:8px;">
+                                <div style="font-size:11px; color:var(--text-muted);">
+                                    Last emptied:<br>
+                                    <span style="color:var(--text-primary); font-weight:600;">${timeAgo(b.last_collected)}</span>
+                                </div>
+                                <button class="btn btn-primary btn-sm" onclick="dispatchSurgical(${b.bin_id}, this)" style="background:var(--red); border:none;">
+                                    🚀 Dispatch Truck
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+                container.innerHTML = html;
+                
+            } catch (err) {
+                console.error(err);
+                document.getElementById("missionsContainer").innerHTML = `
+                    <div class="huge-error-state" style="color:var(--yellow);">
+                        <div class="icon">⚠️</div>
+                        <h2>Connection Error</h2>
+                        <p>Failed to load the pending queue from the server.</p>
+                    </div>`;
+            }
+        }
+        
+        // Target single dispatch
+        async function dispatchSurgical(binId, btn) {
+            btn.disabled = true;
+            btn.textContent = "⏳ Routing...";
+            try {
+                const res = await apiFetch(`/api/fleet/dispatch?bin_id=${binId}`, { method: 'POST' });
+                if (res.dispatched > 0) {
+                    showToast(`✅ Idle truck locked and dispatched to Bin #${binId}`);
+                    // Refresh the queue dynamically
+                    setTimeout(loadQueue, 1000);
+                } else {
+                    showToast(res.messages[0] || "No idle trucks left to dispatch.", "error");
+                    btn.disabled = false;
+                    btn.textContent = "🚀 Try Again";
+                }
+            } catch (err) {
+                showToast("Dispatch failed: " + err.message, "error");
+                btn.disabled = false;
+                btn.textContent = "🚀 Try Again";
+            }
+        }
+        
+        // Mass dispatch all criticals
+        async function massDeploy(btn) {
+            btn.disabled = true;
+            btn.textContent = "⏳ Deploying Fleet...";
+            try {
+                const res = await apiFetch('/api/fleet/dispatch', { method: 'POST' });
+                if (res.dispatched > 0) {
+                    showToast(`🚨 MASS DEPLOYMENT SUCCESS: ${res.dispatched} trucks routed.`);
+                    setTimeout(loadQueue, 1500);
+                } else {
+                    showToast(res.messages[0] || "No actions taken (no full bins or idle trucks).", "error");
+                }
+            } catch (err) {
+                showToast("Deploy failed: " + err.message, "error");
+            }
+            setTimeout(() => { 
+                btn.disabled = false; 
+                btn.innerHTML = `Deploy All Fleet`; 
+            }, 3000);
+        }
+
+        // Initialize view
+        loadQueue();
+        
+        // Automatically check for new criticals every 10 seconds
+        setInterval(loadQueue, 10000);
+    </script>
+</body>
+</html>

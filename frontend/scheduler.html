@@ -4,8 +4,122 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Scheduler – EcoSort AI</title>
+    <title>Fleet Dispatch – EcoSort AI</title>
     <link rel="stylesheet" href="css/styles.css" />
+    <!-- Leaflet CSS for Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <style>
+        /* Layout for map + side panel */
+        .dispatch-layout {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 120px);
+            min-height: 600px;
+        }
+
+        .fleet-panel {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .map-panel {
+            flex: 1;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .truck-card {
+            background: var(--bg-input);
+            border-radius: 8px;
+            padding: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .truck-card .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .truck-card .id {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .truck-card .assignment {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Markers */
+        .marker-bin {
+            width: 30px;
+            height: 30px;
+            background: white;
+            border-radius: 50%;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            border: 2px solid;
+        }
+
+        .marker-bin.critical {
+            border-color: var(--red);
+        }
+
+        .marker-bin.normal {
+            border-color: var(--green);
+        }
+
+        .marker-truck {
+            width: 36px;
+            height: 36px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 2px solid var(--accent);
+        }
+
+        .marker-truck.idle {
+            border-color: var(--text-muted);
+            opacity: 0.8;
+        }
+
+        .marker-truck.en_route {
+            border-color: var(--yellow);
+        }
+    </style>
+    <script src="js/auth.js"></script>
 </head>
 
 <body>
@@ -20,9 +134,11 @@
             <div class="nav-section-label">Menu</div>
             <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
             <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="pending.html"><span class="nav-icon">🚨</span><span>Needs Action</span></a>
             <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
             <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
-            <a class="nav-item active" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
+            <a class="nav-item active" href="scheduler.html"><span class="nav-icon">🚛</span><span>Fleet
+                    Dispatch</span></a>
         </nav>
         <div class="sidebar-footer">
             <div class="user-info">
@@ -36,331 +152,269 @@
     </aside>
 
     <main class="main">
-        <div class="page-header">
-            <h1>Smart Scheduler</h1>
-            <p>Greedy + Dijkstra optimized collection route generation</p>
+        <div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-end;">
+            <div>
+                <h1>Autonomous Fleet Dispatch</h1>
+                <p>Live map tracking garbage trucks responding to full bins</p>
+            </div>
+            <button class="btn btn-primary" id="autoDispatchBtn" style="padding: 12px 24px; font-size: 15px;">
+                ⚡ Auto-Dispatch Fleet
+            </button>
         </div>
+
         <div class="page-content">
-
-            <div class="grid-2" style="margin-bottom:16px;">
-
-                <!-- Config panel -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">⚙️ Schedule Configuration</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="truckId">Truck ID</label>
-                        <input class="form-control" id="truckId" type="text" value="TRUCK-01"
-                            placeholder="e.g. TRUCK-01" />
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="depotBin">Depot Bin (start point)</label>
-                        <select class="form-control" id="depotBin">
-                            <option value="">Auto (highest priority)</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label">Distance Matrix</label>
-                        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-                            Auto-generated from mock bin coordinates. Format: <code
-                                style="font-size:11px;color:var(--accent);">"binId1-binId2": km</code>
+            <div class="dispatch-layout">
+                <!-- Left Panel: Fleet List -->
+                <div class="fleet-panel">
+                    
+                    <!-- Pending Actions Queue -->
+                    <div class="card" style="padding: 16px; border-color:var(--red);">
+                        <h3 style="margin: 0 0 16px 0; font-size: 14px; color: var(--red); display:flex; align-items:center; gap:6px;">🚨 PENDING ACTIONS <span class="badge" style="background:var(--red); color:white; padding:2px 6px; border-radius:12px; font-size:11px;" id="pendingCount">0</span></h3>
+                        <div id="pendingList" style="display:flex; flex-direction:column; gap:8px;">
+                            <div style="text-align:center; padding: 20px; color: var(--text-muted); font-size:13px;">Loading queue...</div>
                         </div>
-                        <textarea class="form-control" id="distMatrix" rows="6"
-                            style="font-family:monospace;font-size:12px;resize:vertical;"></textarea>
                     </div>
+                    
+                    <!-- Live Fleet -->
+                    <div class="card" style="padding: 16px;">
+                        <h3 style="margin: 0 0 16px 0; font-size: 14px; color: var(--text-muted);">LIVE FLEET STATUS
+                        </h3>
+                        <div id="fleetList">
+                            <div style="text-align:center; padding: 20px; color: var(--text-muted);">Loading fleet...
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-                    <button class="btn btn-primary" style="width:100%;" id="generateBtn">🚛 Generate Optimized
-                        Schedule</button>
-
-                    <div
-                        style="margin-top:16px;padding:12px;background:var(--bg-input);border-radius:var(--radius-sm);">
+                <!-- Right Panel: Map -->
+                <div class="map-panel">
+                    <div class="map-overlay">
                         <div
-                            style="font-size:11px;color:var(--text-muted);margin-bottom:8px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;">
-                            Priority Formula</div>
-                        <code
-                            style="font-size:12px;color:var(--accent);">priority = (predicted_fill × 0.6) + (days_since_collection × 0.4)</code>
-                        <div style="font-size:11px;color:var(--text-muted);margin-top:6px;">Only bins with predicted
-                            fill &gt; 80% are scheduled.</div>
-                    </div>
-                </div>
-
-                <!-- Route visualization canvas -->
-                <div class="card">
-                    <div class="card-header">
-                        <div class="card-title">🗺️ Route Map</div>
-                        <div class="card-badge green" id="routeStatus">No route generated</div>
-                    </div>
-                    <canvas id="routeCanvas" width="440" height="320"
-                        style="width:100%;height:auto;border-radius:8px;background:var(--bg-input);"></canvas>
-                    <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;">
-                        <div class="legend-item">
-                            <div class="legend-dot"
-                                style="background:var(--accent);border-radius:50%;width:12px;height:12px;"></div><span
-                                style="font-size:12px;color:var(--text-secondary);">Route nodes</span>
-                        </div>
-                        <div class="legend-item">
-                            <div style="width:24px;height:2px;background:var(--purple);border-radius:1px;"></div><span
-                                style="font-size:12px;color:var(--text-secondary);">Optimized path</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-dot"
-                                style="background:var(--yellow);border-radius:50%;width:12px;height:12px;"></div><span
-                                style="font-size:12px;color:var(--text-secondary);">Depot</span>
+                            style="background: var(--bg-card); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); font-size: 12px; font-weight: 500; display:flex; gap: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <span style="display:flex; align-items:center; gap:6px;"><span
+                                    style="width:10px;height:10px;border-radius:50%;background:var(--red);"></span> Full
+                                Bin</span>
+                            <span style="display:flex; align-items:center; gap:6px;"><span
+                                    style="width:10px;height:10px;border-radius:50%;background:var(--text-muted);"></span>
+                                Idle Truck</span>
+                            <span style="display:flex; align-items:center; gap:6px;"><span
+                                    style="width:10px;height:10px;border-radius:50%;background:var(--yellow);"></span>
+                                En Route</span>
                         </div>
                     </div>
+                    <div id="map"></div>
                 </div>
             </div>
-
-            <!-- Route list -->
-            <div class="card" id="scheduleCard">
-                <div class="card-header">
-                    <div class="card-title">📋 Optimized Collection Route</div>
-                    <div id="routeMetaEl" style="font-size:12px;color:var(--text-muted);"></div>
-                </div>
-                <div id="routeList" class="route-list">
-                    <div style="text-align:center;padding:32px;color:var(--text-muted);">
-                        Generate a schedule to see the optimized route
-                    </div>
-                </div>
-            </div>
-
-            <!-- Schedule table -->
-            <div class="card" style="margin-top:16px;">
-                <div class="card-header">
-                    <div class="card-title">📅 Today's Schedule</div>
-                    <button class="btn btn-secondary btn-sm" id="loadTodayBtn">Refresh Today</button>
-                </div>
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Route Order</th>
-                                <th>Bin ID</th>
-                                <th>Priority Score</th>
-                                <th>Truck</th>
-                                <th>Scheduled Date</th>
-                            </tr>
-                        </thead>
-                        <tbody id="scheduleTableBody">
-                            <tr>
-                                <td colspan="5" class="td-muted" style="padding:20px;text-align:center;">No schedule
-                                    generated yet</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
         </div>
     </main>
 
-    <script src="js/api.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <script src="js/api.js?v=3"></script>
     <script>
-        // ── Init: load bins and default distance matrix ─────────────────────────────
-        async function initPage() {
-            try {
-                const bins = await api.getBins();
-                const sel = document.getElementById("depotBin");
-                sel.innerHTML = '<option value="">Auto (highest priority)</option>' +
-                    bins.map(b => `<option value="${b.bin_id}">Bin #${b.bin_id} – ${b.location}</option>`).join("");
+        // ── Initialize Map (Centered roughly on Chennai) ─────────────────────────────
+        const map = L.map('map').setView([13.0827, 80.2707], 15);
 
-                // Generate default distance matrix from fake coordinates
-                if (bins.length > 0) {
-                    const matrix = {};
-                    for (let i = 0; i < bins.length; i++) {
-                        for (let j = i + 1; j < bins.length; j++) {
-                            const dist = +(1.5 + Math.random() * 8).toFixed(2);
-                            matrix[`${bins[i].bin_id}-${bins[j].bin_id}`] = dist;
+        // Google Maps Satellite / Hybrid Layer
+        L.tileLayer('http://mt0.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}', {
+            attribution: '&copy; Google Maps',
+            maxZoom: 20
+        }).addTo(map);
+
+        let binMarkers = {};
+        let truckMarkers = {};
+        let routingControls = {};
+
+        // ── Icons ────────────────────────────────────────────────────────────────
+        const createBinIcon = (fill) => L.divIcon({
+            html: fill >= 80 ? '🗑️' : 'ok',
+            className: `marker-bin ${fill >= 80 ? 'critical' : 'normal'}`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+
+        const createTruckIcon = (status) => L.divIcon({
+            html: '🚛',
+            className: `marker-truck ${status}`,
+            iconSize: [36, 36],
+            iconAnchor: [18, 18]
+        });
+
+        // ── Status Badges ───────────────────────────────────────────────────────
+        function getStatusBadge(status) {
+            if (status === 'idle') return '<span class="badge" style="background:rgba(148,163,184,.15);color:var(--text-muted);">🟢 Idle</span>';
+            if (status === 'en_route') return '<span class="badge" style="background:rgba(234,179,8,.15);color:var(--yellow);">🟡 En Route</span>';
+            if (status === 'collecting') return '<span class="badge" style="background:rgba(168,85,247,.15);color:var(--accent);">🟣 Collecting</span>';
+            return `<span class="badge">${status}</span>`;
+        }
+
+
+        // ── Fetch & Render Data ──────────────────────────────────────────────────
+        async function refreshMap() {
+            try {
+                // 1. Fetch Bins
+                const bins = await api.getBins();
+                bins.forEach(b => {
+                    // Create or update bin marker
+                    if (!binMarkers[b.bin_id]) {
+                        binMarkers[b.bin_id] = L.marker([b.lat, b.lng], { icon: createBinIcon(b.current_fill) })
+                            .addTo(map)
+                            .bindPopup(`<b>Bin #${b.bin_id}</b><br>${b.location}<br>Fill: ${b.current_fill}%`);
+                    } else {
+                        binMarkers[b.bin_id].setIcon(createBinIcon(b.current_fill));
+                        binMarkers[b.bin_id].getPopup().setContent(`<b>Bin #${b.bin_id}</b><br>${b.location}<br>Fill: ${b.current_fill}%`);
+                    }
+                });
+
+                // 2. Fetch Fleet
+                const trucks = await api.getFleetStatus();
+
+                // Update map markers and routing
+                trucks.forEach(t => {
+                    if (!truckMarkers[t.truck_id]) {
+                        truckMarkers[t.truck_id] = L.marker([t.current_lat, t.current_lng], { icon: createTruckIcon(t.status) })
+                            .addTo(map)
+                            .bindPopup(`<b>${t.truck_id}</b><br>Status: ${t.status}`);
+                    } else {
+                        // Simple animation to new position
+                        truckMarkers[t.truck_id].setLatLng([t.current_lat, t.current_lng]);
+                        truckMarkers[t.truck_id].setIcon(createTruckIcon(t.status));
+                        truckMarkers[t.truck_id].getPopup().setContent(`<b>${t.truck_id}</b><br>Status: ${t.status}`);
+                    }
+
+                    // Routing Logic (Draw path if en_route)
+                    if (t.status === 'en_route' && t.assigned_bin_id) {
+                        if (!routingControls[t.truck_id]) {
+                            const targetBin = bins.find(b => b.bin_id === t.assigned_bin_id);
+                            if (targetBin) {
+                                routingControls[t.truck_id] = L.Routing.control({
+                                    waypoints: [
+                                        L.latLng(t.current_lat, t.current_lng),
+                                        L.latLng(targetBin.lat, targetBin.lng)
+                                    ],
+                                    lineOptions: {
+                                        styles: [{ color: '#eab308', opacity: 0.8, weight: 6 }]
+                                    },
+                                    show: false,
+                                    addWaypoints: false,
+                                    routeWhileDragging: false,
+                                    draggableWaypoints: false,
+                                    fitSelectedRoutes: true,
+                                    createMarker: function () { return null; }
+                                }).addTo(map);
+                            }
+                        }
+                    } else {
+                        // If truck is idle or collecting, remove any existing route line
+                        if (routingControls[t.truck_id]) {
+                            map.removeControl(routingControls[t.truck_id]);
+                            delete routingControls[t.truck_id];
                         }
                     }
-                    document.getElementById("distMatrix").value = JSON.stringify(matrix, null, 2);
+                });
+
+                // Update Fleet List Panel
+                const fleetList = document.getElementById("fleetList");
+                fleetList.innerHTML = trucks.map(t => {
+                    let actionBtn = "";
+                    if (t.status === 'en_route') {
+                        actionBtn = `<button class="btn btn-secondary btn-sm" onclick="markComplete('${t.truck_id}')" style="width:100%; margin-top:12px;">✅ Mark Collected</button>`;
+                    }
+
+                    const targetBin = t.assigned_bin_id ? `Heading to Bin #${t.assigned_bin_id}` : "Awaiting dispatch...";
+
+                    return `
+        <div class="truck-card">
+          <div class="header">
+            <div class="id">🚛 ${t.truck_id}</div>
+            ${getStatusBadge(t.status)}
+          </div>
+          <div class="assignment">${targetBin}</div>
+          ${actionBtn}
+        </div>
+      `;
+                }).join("");
+
+                // 3. Fetch Pending Actions
+                const pendingBins = await apiFetch('/api/fleet/pending');
+                const pendingList = document.getElementById("pendingList");
+                document.getElementById("pendingCount").textContent = pendingBins.length;
+                
+                if (pendingBins.length === 0) {
+                    pendingList.innerHTML = `<div style="text-align:center; padding: 20px; color: var(--text-muted); font-size:13px;">No critical bins waiting 🎯</div>`;
+                } else {
+                    pendingList.innerHTML = pendingBins.map(b => `
+                        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-input); padding:10px; border-radius:6px; border:1px solid rgba(239, 68, 68, 0.3);">
+                            <div>
+                                <div style="font-weight:600; font-size:13px;">Bin #${b.bin_id}</div>
+                                <div style="font-size:11px; color:var(--red); margin-top:2px;">${b.current_fill}% Full</div>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="dispatchPending(${b.bin_id}, this)" style="background:var(--red); border:none; color:white; font-size:11px; padding:4px 8px; cursor:pointer;" title="Assign an idle truck to this bin immediately">Dispatch</button>
+                        </div>
+                    `).join("");
                 }
+
             } catch (e) {
-                showToast("Could not load bins: " + e.message, "error");
+                console.error("Map refresh error:", e);
             }
         }
 
-        // ── Generate schedule ────────────────────────────────────────────────────────
-        document.getElementById("generateBtn").addEventListener("click", async () => {
-            const truckId = document.getElementById("truckId").value.trim() || "TRUCK-01";
-            const depotVal = document.getElementById("depotBin").value;
-            const depotBin = depotVal ? parseInt(depotVal) : null;
-
-            let distMatrix;
-            try {
-                distMatrix = JSON.parse(document.getElementById("distMatrix").value);
-            } catch (_) {
-                return showToast("Invalid distance matrix JSON", "error");
-            }
-
-            const btn = document.getElementById("generateBtn");
-            btn.disabled = true; btn.textContent = "⏳ Optimizing…";
+        // ── Actions ──────────────────────────────────────────────────────────────
+        document.getElementById("autoDispatchBtn").addEventListener("click", async () => {
+            const btn = document.getElementById("autoDispatchBtn");
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;border-top-color:#fff;"></span> Dispatching...`;
 
             try {
-                const data = await api.generateSchedule(truckId, distMatrix, depotBin);
-                renderSchedule(data.schedule);
-                showToast("Route optimized with Dijkstra ✓");
-                document.getElementById("routeStatus").textContent = `${data.schedule.length} bins scheduled`;
+                const res = await api.dispatchFleet();
+                if (res.dispatched_count > 0) {
+                    showToast(`⚡ Dispatched ${res.dispatched_count} trucks to full bins!`);
+                } else {
+                    showToast(res.messages[0] || "No full bins or idle trucks available.");
+                }
+                await refreshMap();
             } catch (e) {
-                showToast("Scheduler error: " + e.message, "error");
+                showToast("Dispatch failed: " + e.message, "error");
             } finally {
-                btn.disabled = false; btn.textContent = "🚛 Generate Optimized Schedule";
+                btn.disabled = false;
+                btn.innerHTML = `⚡ Auto-Dispatch Fleet`;
             }
         });
 
-        // ── Render schedule results ──────────────────────────────────────────────────
-        async function renderSchedule(schedules) {
-            if (!schedules || schedules.length === 0) {
-                document.getElementById("routeList").innerHTML =
-                    '<div style="text-align:center;padding:32px;color:var(--text-muted);">No bins meet the scheduling criteria (predicted fill > 80%)</div>';
-                return;
-            }
-
-            // Fetch bins for location info
-            let binMap = {};
+        window.markComplete = async (truckId) => {
             try {
-                const bins = await api.getBins();
-                bins.forEach(b => { binMap[b.bin_id] = b; });
-            } catch (_) { }
-
-            // Sort by route_order
-            const sorted = [...schedules].sort((a, b) => a.route_order - b.route_order);
-
-            // Route list
-            document.getElementById("routeList").innerHTML = sorted.map((s, idx) => {
-                const b = binMap[s.bin_id] || {};
-                const priorityColor = s.priority_score >= 80 ? "var(--red)" : s.priority_score >= 60 ? "var(--yellow)" : "var(--accent)";
-                return `<div class="route-item">
-      <div class="route-step">${idx + 1}</div>
-      <div class="route-item-info">
-        <div class="loc">Bin #${s.bin_id}${b.location ? ` – ${b.location}` : ""}</div>
-        <div class="meta">Route order: ${s.route_order} · Truck: ${s.truck_id}</div>
-      </div>
-      <div class="route-priority" style="background:${priorityColor}22;color:${priorityColor};">
-        Priority: ${s.priority_score.toFixed(1)}
-      </div>
-    </div>`;
-            }).join("");
-
-            document.getElementById("routeMetaEl").textContent =
-                `${sorted.length} bins · ${sorted[0]?.scheduled_date || "today"}`;
-
-            // Canvas visualization
-            drawRouteMap(sorted, binMap);
-
-            // Table
-            document.getElementById("scheduleTableBody").innerHTML = sorted.map(s => `<tr>
-    <td>${s.route_order}</td>
-    <td class="td-id">#${s.bin_id}</td>
-    <td>
-      <div class="fill-bar-wrap">
-        <div class="fill-bar"><div class="fill-bar-inner fill-high" style="width:${Math.min(s.priority_score, 100)}%"></div></div>
-        <span class="fill-pct">${s.priority_score.toFixed(1)}</span>
-      </div>
-    </td>
-    <td class="td-muted">${s.truck_id}</td>
-    <td class="td-muted">${s.scheduled_date}</td>
-  </tr>`).join("");
-        }
-
-        // ── Canvas route map ─────────────────────────────────────────────────────────
-        function drawRouteMap(schedules, binMap) {
-            const canvas = document.getElementById("routeCanvas");
-            const ctx = canvas.getContext("2d");
-            const W = canvas.width, H = canvas.height;
-            ctx.clearRect(0, 0, W, H);
-
-            if (schedules.length === 0) return;
-
-            // Place nodes in a circle
-            const cx = W / 2, cy = H / 2;
-            const r = Math.min(W, H) * 0.36;
-            const n = schedules.length;
-            const nodePositions = schedules.map((_, i) => ({
-                x: cx + r * Math.cos((2 * Math.PI * i) / n - Math.PI / 2),
-                y: cy + r * Math.sin((2 * Math.PI * i) / n - Math.PI / 2),
-            }));
-
-            // Draw edges
-            ctx.setLineDash([5, 4]);
-            ctx.strokeStyle = "rgba(168,85,247,0.5)";
-            ctx.lineWidth = 2;
-            for (let i = 0; i < nodePositions.length - 1; i++) {
-                const a = nodePositions[i], b = nodePositions[i + 1];
-                ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+                await api.completeCollection(truckId);
+                showToast(`✅ Truck ${truckId} completed collection.`);
+                await refreshMap();
+            } catch (e) {
+                showToast("Failed to complete: " + e.message, "error");
             }
-            ctx.setLineDash([]);
+        };
 
-            // Draw arrowheads
-            for (let i = 0; i < nodePositions.length - 1; i++) {
-                const a = nodePositions[i], b = nodePositions[i + 1];
-                const angle = Math.atan2(b.y - a.y, b.x - a.x);
-                const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-                ctx.save();
-                ctx.translate(mx, my);
-                ctx.rotate(angle);
-                ctx.fillStyle = "rgba(168,85,247,0.8)";
-                ctx.beginPath();
-                ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4);
-                ctx.closePath(); ctx.fill();
-                ctx.restore();
-            }
-
-            // Draw nodes
-            nodePositions.forEach((pos, i) => {
-                const s = schedules[i];
-                const isDepot = i === 0;
-                const color = isDepot ? "#f59e0b" : "#10b981";
-
-                // Glow
-                const grd = ctx.createRadialGradient(pos.x, pos.y, 4, pos.x, pos.y, 22);
-                grd.addColorStop(0, color + "55");
-                grd.addColorStop(1, "transparent");
-                ctx.beginPath(); ctx.arc(pos.x, pos.y, 22, 0, Math.PI * 2);
-                ctx.fillStyle = grd; ctx.fill();
-
-                // Circle
-                ctx.beginPath(); ctx.arc(pos.x, pos.y, 14, 0, Math.PI * 2);
-                ctx.fillStyle = color + "33";
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 2;
-                ctx.fill(); ctx.stroke();
-
-                // Number
-                ctx.fillStyle = "#f1f5f9";
-                ctx.font = "bold 11px Inter, sans-serif";
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(i + 1, pos.x, pos.y);
-
-                // Label
-                ctx.fillStyle = "#8b92a9";
-                ctx.font = "10px Inter, sans-serif";
-                const label = `#${s.bin_id}`;
-                const labelY = pos.y > cy ? pos.y + 24 : pos.y - 24;
-                ctx.fillText(label, pos.x, labelY);
-            });
-        }
-
-        // ── Load today's schedule ───────────────────────────────────────────────────
-        async function loadToday() {
-            const truckId = document.getElementById("truckId").value.trim() || "TRUCK-01";
+        window.dispatchPending = async (binId, btn) => {
+            btn.disabled = true;
+            btn.textContent = "⏳...";
             try {
-                const schedules = await api.getTodaySchedule(truckId);
-                if (schedules.length > 0) {
-                    renderSchedule(schedules);
+                const res = await apiFetch(`/api/fleet/dispatch?bin_id=${binId}`, { method: 'POST' });
+                if (res.dispatched > 0) {
+                    showToast(`✅ Truck dispatched securely to Bin #${binId}`);
+                    await refreshMap();
+                } else {
+                    showToast(res.messages[0] || "No idle trucks left to dispatch.", "error");
+                    btn.disabled = false;
+                    btn.textContent = "Dispatch";
                 }
-            } catch (_) { }
-        }
+            } catch (e) {
+                showToast("Dispatch failed: " + e.message, "error");
+                btn.disabled = false;
+                btn.textContent = "Dispatch";
+            }
+        };
 
-        document.getElementById("loadTodayBtn").addEventListener("click", loadToday);
+        // Initial load & setup polling
+        refreshMap();
+        setInterval(refreshMap, 3000); // Poll every 3s to keep fleet live
 
-        initPage();
-        loadToday();
     </script>
 </body>
 

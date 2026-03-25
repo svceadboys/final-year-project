@@ -13,3 +13,6 @@ networkx
 matplotlib
 python-multipart
 aiofiles
+python-jose[cryptography]
+passlib[bcrypt]
+opencv-python-headless

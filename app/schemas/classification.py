@@ -12,6 +12,7 @@ class ClassificationCreate(BaseModel):
 
 class ClassificationRead(ClassificationCreate):
     id: int
+    predicted_fill: Optional[float] = None
     timestamp: datetime
 
     model_config = {"from_attributes": True}

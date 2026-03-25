@@ -123,6 +123,7 @@
             margin-top: 2px;
         }
     </style>
+    <script src="js/auth.js"></script>
 </head>
 
 <body>
@@ -137,6 +138,7 @@
             <div class="nav-section-label">Menu</div>
             <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
             <a class="nav-item active" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="pending.html"><span class="nav-icon">🚨</span><span>Needs Action</span></a>
             <a class="nav-item" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
             <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
             <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
@@ -164,13 +166,6 @@
                 <div class="card" style="max-width:680px;margin:0 auto;">
                     <div class="card-header">
                         <div class="card-title">📸 Step 1 — Select Images</div>
-                    </div>
-
-                    <div class="form-group">
-                        <label class="form-label" for="binSelect">Assign to Bin</label>
-                        <select class="form-control" id="binSelect">
-                            <option value="">Loading bins…</option>
-                        </select>
                     </div>
 
                     <div class="upload-zone" id="uploadZone">
@@ -225,6 +220,7 @@
                     <div class="card-header">
                         <div class="card-title">✅ Classification Results</div>
                         <div style="display:flex;gap:8px;">
+                            <button class="btn btn-primary btn-sm" onclick="dispatchAll(this)" style="background:var(--red); border-color:var(--red);" title="Dispatch trucks to all critically full zones">🚨 Dispatch All Critical</button>
                             <a href="index.html" class="btn btn-primary btn-sm">📊 Dashboard</a>
                             <button class="btn btn-secondary btn-sm" id="classifyMoreBtn">🔄 Classify More</button>
                         </div>
@@ -242,7 +238,7 @@
                                     <th>Filename</th>
                                     <th>Predicted Type</th>
                                     <th>Confidence</th>
-                                    <th>Bin</th>
+                                    <th>Fill Level</th>
                                     <th>Timestamp</th>
                                 </tr>
                             </thead>
@@ -302,7 +298,7 @@
         </div>
     </main>
 
-    <script src="js/api.js"></script>
+    <script src="js/api.js?v=3"></script>
     <script>
         const EMOJIS = { cardboard: "📦", glass: "🥃", metal: "🔩", paper: "📄", plastic: "🧴", trash: "�️" };
         const steps = ["step1", "step2", "step3"];
@@ -312,17 +308,6 @@
             steps.forEach(s => document.getElementById(s).classList.remove("active"));
             document.getElementById(id).classList.add("active");
             window.scrollTo({ top: 0, behavior: "smooth" });
-        }
-
-        // ── Load bins ────────────────────────────────────────────────────────────────
-        async function loadBins() {
-            try {
-                const bins = await api.getBins();
-                const sel = document.getElementById("binSelect");
-                sel.innerHTML = bins.map(b => `<option value="${b.bin_id}">Bin #${b.bin_id} — ${b.location}</option>`).join("");
-            } catch (e) {
-                document.getElementById("binSelect").innerHTML = '<option value="">Error loading bins</option>';
-            }
         }
 
         // ── Upload zone ──────────────────────────────────────────────────────────────
@@ -393,53 +378,43 @@
 
         // ── PREDICT ALL ──────────────────────────────────────────────────────────────
         document.getElementById("predictBtn").addEventListener("click", async () => {
-            const binId = document.getElementById("binSelect").value;
-            if (!binId) return showToast("Select a bin first", "error");
             if (selectedFiles.length === 0) return;
 
             showStep("step2");
 
             const total = selectedFiles.length;
-            const BATCH_SIZE = 5; // send 5 at a time
             const allResults = [];
             let processed = 0;
 
-            // Save filenames before sending (the response won't have them)
             const filenames = selectedFiles.map(f => f.name);
 
-            for (let i = 0; i < total; i += BATCH_SIZE) {
-                const batch = selectedFiles.slice(i, i + BATCH_SIZE);
-                const batchFilenames = filenames.slice(i, i + BATCH_SIZE);
-
+            // Process sequentially, assigning each unique test image to an independent simulated bin
+            for (let i = 0; i < total; i++) {
+                const file = selectedFiles[i];
+                const simulatedBinId = Math.floor(Math.random() * 95) + 6; // Dynamically track IDs 6 to 100
+                
                 try {
-                    const results = await api.classifyBatch(binId, batch);
-                    // Attach filenames to results
-                    results.forEach((r, j) => { r._filename = batchFilenames[j]; });
-                    allResults.push(...results);
-                } catch (e) {
-                    // If batch fails, try one by one
-                    for (let j = 0; j < batch.length; j++) {
-                        try {
-                            const r = await api.classifyImage(binId, batch[j]);
-                            r._filename = batchFilenames[j];
-                            allResults.push(r);
-                        } catch (e2) {
-                            allResults.push({ _filename: batchFilenames[j], waste_type: "error", confidence: 0, timestamp: new Date().toISOString(), bin_id: binId, _error: e2.message });
-                        }
-                    }
+                    const r = await api.classifyImage(simulatedBinId, file);
+                    r._filename = filenames[i];
+                    allResults.push(r);
+                } catch (e2) {
+                    allResults.push({ _filename: filenames[i], waste_type: "error", confidence: 0, timestamp: new Date().toISOString(), bin_id: simulatedBinId, _error: e2.message });
                 }
 
-                processed = Math.min(i + BATCH_SIZE, total);
+                processed++;
                 const pct = Math.round((processed / total) * 100);
                 document.getElementById("progressBar").style.width = pct + "%";
                 document.getElementById("progressText").textContent = `${processed} / ${total} classified`;
-                document.getElementById("processingDetail").textContent =
-                    processed < total ? `Processing batch ${Math.floor(i / BATCH_SIZE) + 1}…` : "Finalizing results…";
+                document.getElementById("processingDetail").textContent = "Running Deep Learning inference...";
             }
 
             renderResults(allResults);
+            
+            // 💾 Persist results to local cache so data isn't lost on page exit!
+            localStorage.setItem("cachedClassifyResults", JSON.stringify(allResults));
+            
             showStep("step3");
-            showToast(`✓ ${allResults.length} images classified and saved to database`);
+            showToast(`✓ ${allResults.length} distinct bins classified and synced.`);
         });
 
         // ── RENDER RESULTS TABLE ─────────────────────────────────────────────────────
@@ -477,7 +452,10 @@
           <span style="font-size:12px;font-weight:600;color:${confColor}">${conf}%</span>
         </div>
       </td>
-      <td class="td-muted">#${r.bin_id}</td>
+      <td style="font-weight:600; font-size:13px; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+        ${r.predicted_fill !== undefined ? r.predicted_fill + '%' : '—'}
+        ${r.predicted_fill >= 80.0 ? `<button class="btn btn-secondary btn-sm" onclick="dispatchFleet(${r.bin_id}, this)" style="padding:2px 8px; font-size:10px; background:var(--red); color:white; border:none; cursor:pointer;" title="Manually dispatch nearest available truck">🚨 Dispatch Fleet</button>` : ''}
+      </td>
       <td class="td-muted">${formatDate(r.timestamp)}</td>
     </tr>`;
             }).join("");
@@ -485,6 +463,8 @@
 
         // ── Classify More ────────────────────────────────────────────────────────────
         document.getElementById("classifyMoreBtn").addEventListener("click", () => {
+            // Clear the cache since user is starting a brand new batch
+            localStorage.removeItem("cachedClassifyResults");
             selectedFiles = [];
             fileInp.value = "";
             folderInp.value = "";
@@ -492,8 +472,71 @@
             document.getElementById("progressBar").style.width = "0%";
             showStep("step1");
         });
+        
+        // ── Cache Loader ───────────────────────────────────────────────────────────
+        document.addEventListener("DOMContentLoaded", () => {
+            const cached = localStorage.getItem("cachedClassifyResults");
+            if (cached) {
+                try {
+                    const results = JSON.parse(cached);
+                    if (results && results.length > 0) {
+                        renderResults(results);
+                        showStep("step3");
+                    }
+                } catch(e) {
+                    console.error("Failed to load cache:", e);
+                }
+            }
+        });
 
-        loadBins();
+        // ── Manual Dispatch Handler ──────────────────────────────────────────────────
+        async function dispatchFleet(binId, btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Dispatching...';
+            try {
+                // Manually trigger the autonomous matching loop for ONLY this targeted bin
+                const res = await apiFetch(`/api/fleet/dispatch?bin_id=${binId}`, { method: 'POST' });
+                if (res.dispatched > 0) {
+                    btn.textContent = '✅ Dispatched';
+                    btn.style.background = 'var(--accent)';
+                    showToast(`Surgical Dispatch Success! Truck assigned to collect Bin #${binId}. Verify live in Scheduler.`);
+                } else {
+                    btn.textContent = '⚠️ No Action';
+                    btn.style.background = 'var(--yellow)';
+                    btn.style.color = 'black';
+                    showToast(res.messages[0] || 'Target dispatch failed.', 'error');
+                }
+            } catch (err) {
+                btn.textContent = '❌ Error';
+                showToast(err.message || 'Dispatch command failed', 'error');
+                btn.disabled = false;
+            }
+        }
+        
+        async function dispatchAll(btn) {
+            btn.disabled = true;
+            btn.textContent = '⏳ Deploying Fleet...';
+            try {
+                // Trigger mass-dispatch loop on all unassigned critical bins globally
+                const res = await apiFetch('/api/fleet/dispatch', { method: 'POST' });
+                if (res.dispatched > 0) {
+                    btn.textContent = `✅ ${res.dispatched} Trucks Deployed`;
+                    btn.style.background = 'var(--accent)';
+                    btn.style.borderColor = 'var(--accent)';
+                    showToast(`Mass Dispatch Success! ${res.dispatched} trucks dynamically routed to critical zones.`);
+                } else {
+                    btn.textContent = '⚠️ No Action Taken';
+                    btn.style.background = 'var(--yellow)';
+                    btn.style.color = 'black';
+                    btn.style.borderColor = 'var(--yellow)';
+                    showToast(res.messages[0] || 'No idle trucks or critical bins found.', 'error');
+                }
+            } catch (err) {
+                btn.textContent = '❌ Error';
+                showToast(err.message || 'Mass dispatch failed', 'error');
+            }
+            setTimeout(() => { btn.disabled = false; }, 3000);
+        }
     </script>
 </body>
 

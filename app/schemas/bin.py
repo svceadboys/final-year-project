@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 class BinBase(BaseModel):
     location: str
+    lat: float = 0.0
+    lng: float = 0.0
     capacity: float
     current_fill: float = 0.0
     last_collected: Optional[datetime] = None

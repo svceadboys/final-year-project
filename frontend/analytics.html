@@ -5,7 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Analytics – EcoSort AI</title>
-    <link rel="stylesheet" href="css/styles.css" />
+    <link rel="stylesheet" href="css/styles.css?v=3" />
+    <script src="js/auth.js?v=3"></script>
 </head>
 
 <body>
@@ -20,6 +21,7 @@
             <div class="nav-section-label">Menu</div>
             <a class="nav-item" href="index.html"><span class="nav-icon">⊞</span><span>Dashboard</span></a>
             <a class="nav-item" href="classify.html"><span class="nav-icon">🔍</span><span>Classify</span></a>
+            <a class="nav-item" href="pending.html"><span class="nav-icon">🚨</span><span>Needs Action</span></a>
             <a class="nav-item active" href="analytics.html"><span class="nav-icon">📈</span><span>Analytics</span></a>
             <a class="nav-item" href="records.html"><span class="nav-icon">🗃️</span><span>Records</span></a>
             <a class="nav-item" href="scheduler.html"><span class="nav-icon">🚛</span><span>Scheduler</span></a>
@@ -48,6 +50,24 @@
                 <select class="form-control" id="binSelect" style="max-width:260px;"></select>
                 <button class="btn btn-primary" id="runForecastBtn">▶ Run ARIMA Forecast</button>
                 <div class="spinner hidden" id="spinner"></div>
+            </div>
+
+            <!-- Active Bin Info Card -->
+            <div class="card"
+                style="margin-bottom: 20px; padding: 20px; display: flex; align-items: center; justify-content: space-between;"
+                id="activeBinCard">
+                <div>
+                    <h3 style="margin-top:0; margin-bottom:8px; color:var(--text-light); font-size:18px;"
+                        id="binLocationTitle">—</h3>
+                    <div style="color:var(--text-muted); font-size:13px;" id="binMetaText">Capacity: — | Last Collected:
+                        —</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size:24px; font-weight:700; color:var(--accent);" id="binCurrentFillText">—%</div>
+                    <div
+                        style="font-size:12px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px;">
+                        Current Fill</div>
+                </div>
             </div>
 
             <!-- Forecast info cards -->
@@ -141,8 +161,8 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/charts.js"></script>
+    <script src="js/api.js?v=3"></script>
+    <script src="js/charts.js?v=3"></script>
     <script>
         // ── Generate synthetic "actual" fill history for display ────────────────────
         function syntheticHistory(days = 14, base = 70) {
@@ -227,6 +247,20 @@
             }).join("");
         }
 
+        // ── Load Active Bin Info ────────────────────────────────────────────────────
+        async function loadActiveBinInfo(binId) {
+            try {
+                const bin = await api.getBin(binId);
+                document.getElementById("binLocationTitle").textContent = `Bin #${bin.bin_id}: ${bin.location}`;
+                document.getElementById("binMetaText").textContent = `Capacity: ${bin.capacity}kg | Last Collected: ${formatDate(bin.last_collected)}`;
+                document.getElementById("binCurrentFillText").textContent = `${bin.current_fill}%`;
+                const fillEl = document.getElementById("binCurrentFillText");
+                if (bin.current_fill >= 80) fillEl.style.color = "var(--red)";
+                else if (bin.current_fill >= 50) fillEl.style.color = "var(--yellow)";
+                else fillEl.style.color = "var(--accent)";
+            } catch (e) { console.error("Could not load bin info", e); }
+        }
+
         // ── Try load existing forecast on page load ─────────────────────────────────
         async function tryLoadExistingForecast(binId) {
             try {
@@ -244,14 +278,19 @@
             try {
                 const bins = await loadBins();
                 buildBottomCharts();
-                if (bins.length > 0) await tryLoadExistingForecast(bins[0].bin_id);
+                if (bins.length > 0) {
+                    await loadActiveBinInfo(bins[0].bin_id);
+                    await tryLoadExistingForecast(bins[0].bin_id);
+                }
             } catch (e) {
                 showToast("Error loading data: " + e.message, "error");
             }
         })();
 
         document.getElementById("binSelect").addEventListener("change", async (e) => {
-            await tryLoadExistingForecast(e.target.value);
+            const binId = e.target.value;
+            await loadActiveBinInfo(binId);
+            await tryLoadExistingForecast(binId);
         });
 
         document.getElementById("runForecastBtn").addEventListener("click", async () => {

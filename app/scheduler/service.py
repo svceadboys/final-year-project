@@ -1,10 +1,11 @@
+import math
 from datetime import date
 from typing import Dict, List, Tuple
 
 import networkx as nx
 from sqlalchemy.orm import Session
 
-from app.models import Bin, Forecast, Schedule
+from app.models import Bin, Forecast, Schedule, Truck
 
 
 def calculate_priority(
@@ -153,3 +154,103 @@ def generate_schedule(
         db.refresh(s)
     return schedules
 
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculate the great circle distance in kilometers between two points on the earth."""
+    # Converts decimal degrees to radians
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+
+    # Haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371  # Radius of earth in kilometers
+    return c * r
+
+
+def auto_dispatch_trucks(db: Session, min_fill: float = 80.0, target_bin_id: int | None = None) -> Tuple[int, List[str]]:
+    """
+    Autonomous 'Taxi-App' dispatcher logic:
+    Allows passing a `target_bin_id` to FORCE dispatch a specific bin regardless of fill, 
+    otherwise runs organically on all bins >= min_fill.
+    """
+    messages = []
+    today = date.today()
+    
+    if target_bin_id is not None:
+        full_bins = db.query(Bin).filter(Bin.bin_id == target_bin_id).all()
+        if not full_bins:
+            return 0, [f"Target Bin #{target_bin_id} not found."]
+    else:
+        # Get all bins >= min_fill naturally
+        full_bins = db.query(Bin).filter(Bin.current_fill >= min_fill).all()
+    
+    
+    # 2. Filter out bins that already have a truck LIVE en route to them
+    # Instead of checking daily historical schedules, we check active GPS states
+    active_dispatches = db.query(Truck).filter(Truck.status == "en_route").all()
+    currently_served_bins = {t.assigned_bin_id for t in active_dispatches if t.assigned_bin_id}
+    
+    if target_bin_id is not None:
+        # Override the safety lock if the admin specifically clicked this bin
+        unassigned_full_bins = full_bins
+    else:
+        unassigned_full_bins = [b for b in full_bins if b.bin_id not in currently_served_bins]
+    
+    if not unassigned_full_bins:
+        return 0, ["No unassigned full bins currently require collection."]
+        
+    # 3. Find idle trucks
+    idle_trucks = db.query(Truck).filter(Truck.status == "idle").all()
+    
+    if not idle_trucks:
+        return 0, ["No idle trucks available for dispatch."]
+
+    dispatched_count = 0
+    available_trucks = list(idle_trucks)
+
+    # Sort bins by highest fill first to prioritize the most critical
+    unassigned_full_bins.sort(key=lambda x: x.current_fill, reverse=True)
+
+    for b in unassigned_full_bins:
+        if not available_trucks:
+            messages.append(f"Bin #{b.bin_id} ({b.current_fill}% full) not dispatched - no more idle trucks.")
+            break
+            
+        # Find the nearest available truck
+        best_truck = None
+        best_distance = float("inf")
+        
+        for t in available_trucks:
+            dist = _haversine(b.lat, b.lng, t.current_lat, t.current_lng)
+            if dist < best_distance:
+                best_distance = dist
+                best_truck = t
+                
+        if best_truck:
+            # Dispatch the truck
+            best_truck.status = "en_route"
+            best_truck.assigned_bin_id = b.bin_id
+            
+            # Create a schedule entry for tracking
+            new_schedule = Schedule(
+                truck_id=best_truck.truck_id,
+                bin_id=b.bin_id,
+                priority_score=b.current_fill, # Using current fill as priority
+                route_order=1,
+                scheduled_date=today,
+            )
+            db.add(new_schedule)
+            
+            available_trucks.remove(best_truck)
+            dispatched_count += 1
+            messages.append(f"Dispatched {best_truck.truck_id} to Bin #{b.bin_id} ({best_distance:.1f} km away).")
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        messages.append(f"Database error during dispatch: {e}")
+        return 0, messages
+
+    return dispatched_count, messages

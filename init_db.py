@@ -1,27 +1,30 @@
 """
 init_db.py
-Run this once to create all database tables in your MySQL instance.
+
+A utility script to initialize the database schema and create all tables explicitly.
+This is useful when deploying to a fresh environment or transitioning to a MySQL database,
+ensuring all SQLAlchemy models are safely instantiated.
 
 Usage:
     python init_db.py
 """
 
 import logging
-
-from app.database.session import Base, engine
-
-# Import all models so they register with Base.metadata
-from app.models import Bin, Classification, Forecast, Schedule, BinFillHistory  # noqa: F401
+from app.database.session import engine, Base
+# Import models so Base.metadata knows about them implicitly
+from app.models import Bin, Classification, BinFillHistory, Forecast, Schedule, Truck
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-
-def init_db() -> None:
-    log.info("Creating database tables...")
+def run_migrations():
+    log.info("Connecting to the configured database engine...")
+    log.info(f"Engine URL: {engine.url}")
+    
+    log.info("Creating tables...")
     Base.metadata.create_all(bind=engine)
-    log.info("All tables created successfully.")
-
+    
+    log.info("Database initialization completed successfully! ✓")
 
 if __name__ == "__main__":
-    init_db()
+    run_migrations()

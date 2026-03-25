@@ -5,10 +5,22 @@
 const BASE_URL = "";
 
 async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem("admin_token");
+  const headers = { "Accept": "application/json", ...options.headers };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
   const resp = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Accept": "application/json", ...options.headers },
     ...options,
+    headers,
   });
+
+  if (resp.status === 401) {
+    if (window.logout) window.logout();
+    await new Promise(() => { }); // Freeze execution to prevent flashing errors before redirect completes
+  }
+
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
     throw new Error(err.detail || `HTTP ${resp.status}`);
@@ -45,8 +57,25 @@ const api = {
     return apiFetch(`/api/records/?${params}`);
   },
   getRecordStats: () => apiFetch("/api/records/stats"),
-  downloadCSV: () => {
-    window.open(`${BASE_URL}/api/records/download`, "_blank");
+  downloadCSV: async () => {
+    const token = localStorage.getItem("admin_token");
+    const headers = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const resp = await fetch(`${BASE_URL}/api/records/download`, { headers });
+    if (!resp.ok) throw new Error("Download failed");
+
+    const blob = await resp.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    // The backend provides the filename in Content-Disposition if we want to parse it, 
+    // but a client-side generic name works just as well.
+    a.download = `waste_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   },
 
   // Forecast
@@ -61,6 +90,11 @@ const api = {
       headers: { "Content-Type": "application/json" },
     }),
   getTodaySchedule: (truckId) => apiFetch(`/api/scheduler/today/${truckId}`),
+
+  // Fleet Management
+  getFleetStatus: () => apiFetch("/api/fleet/trucks"),
+  dispatchFleet: () => apiFetch("/api/fleet/dispatch", { method: "POST" }),
+  completeCollection: (truckId) => apiFetch(`/api/fleet/${truckId}/complete`, { method: "POST" }),
 };
 
 // ── Toast notifications ────────────────────────────────────────────────────

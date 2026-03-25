@@ -7,10 +7,12 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.routes import classification, forecast, scheduler, bins
+from app.routes import classification, forecast, scheduler, bins, fleet, auth
 from app.routes import records
-from app.database.session import get_db
-from app.models import Bin, Classification, Forecast as ForecastModel
+from app.database.session import get_db, SessionLocal, engine
+from app.database.session import Base
+from app.models import Bin, Classification, Forecast as ForecastModel, Truck
+from app.api.deps import get_current_admin
 from datetime import date
 
 
@@ -29,14 +31,43 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    app.include_router(classification.router, prefix="/api/classification", tags=["Classification"])
-    app.include_router(forecast.router,       prefix="/api/forecast",       tags=["Forecast"])
-    app.include_router(scheduler.router,      prefix="/api/scheduler",      tags=["Scheduler"])
-    app.include_router(bins.router,           prefix="/api/bins",           tags=["Bins"])
-    app.include_router(records.router,        prefix="/api/records",        tags=["Records"])
+    app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+    
+    app.include_router(classification.router, prefix="/api/classification", tags=["Classification"], dependencies=[Depends(get_current_admin)])
+    app.include_router(forecast.router,       prefix="/api/forecast",       tags=["Forecast"], dependencies=[Depends(get_current_admin)])
+    app.include_router(scheduler.router,      prefix="/api/scheduler",      tags=["Scheduler"], dependencies=[Depends(get_current_admin)])
+    app.include_router(bins.router,           prefix="/api/bins",           tags=["Bins"], dependencies=[Depends(get_current_admin)])
+    app.include_router(records.router,        prefix="/api/records",        tags=["Records"], dependencies=[Depends(get_current_admin)])
+    app.include_router(fleet.router,          prefix="/api/fleet",          tags=["Fleet Management"], dependencies=[Depends(get_current_admin)])
+
+    @app.on_event("startup")
+    def startup_db_seed():
+        """Ensure the SQLite DB is created and seeded with Chennai mock data if empty."""
+        Base.metadata.create_all(bind=engine)
+        with SessionLocal() as db:
+            if db.query(Truck).count() == 0:
+                print("Seeding fresh Chennai database...")
+                # 1. Seed Bins
+                bin_data = [
+                    {"location": "Main Gate - Block A", "capacity": 100.0, "current_fill": 85.0, "lat": 13.0827, "lng": 80.2707},
+                    {"location": "Cafeteria - Block B", "capacity": 150.0, "current_fill": 90.0, "lat": 13.0835, "lng": 80.2715},
+                    {"location": "Library - Block C",   "capacity": 80.0,  "current_fill": 15.0, "lat": 13.0815, "lng": 80.2725},
+                    {"location": "Hostel - Block D",    "capacity": 200.0, "current_fill": 95.0, "lat": 13.0845, "lng": 80.2690},
+                    {"location": "Auditorium - Block E","capacity": 120.0, "current_fill": 45.0, "lat": 13.0820, "lng": 80.2680},
+                ]
+                for b in bin_data: db.add(Bin(**b))
+                
+                # 2. Seed Trucks
+                truck_data = [
+                    {"truck_id": "TRK-001", "status": "idle", "current_lat": 13.0810, "current_lng": 80.2700},
+                    {"truck_id": "TRK-002", "status": "idle", "current_lat": 13.0850, "current_lng": 80.2720},
+                    {"truck_id": "TRK-003", "status": "idle", "current_lat": 13.0830, "current_lng": 80.2690},
+                ]
+                for t in truck_data: db.add(Truck(**t))
+                db.commit()
 
     @app.get("/api/dashboard/summary", tags=["Dashboard"])
-    def dashboard_summary(db: Session = Depends(get_db)):
+    def dashboard_summary(db: Session = Depends(get_db), current_admin: str = Depends(get_current_admin)):
         """Aggregate stats for the admin dashboard."""
         all_bins = db.query(Bin).all()
         total_bins = len(all_bins)
